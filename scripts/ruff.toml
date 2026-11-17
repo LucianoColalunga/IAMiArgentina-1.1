@@ -1,0 +1,2 @@
+# Mismas reglas que el backend.
+extend = "../backend/pyproject.toml"

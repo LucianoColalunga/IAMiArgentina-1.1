@@ -1,0 +1,6 @@
+# Mismas reglas que el backend; las pruebas importan el paquete iamia y el conftest local.
+extend = "../../backend/pyproject.toml"
+
+[lint.isort]
+known-first-party = ["iamia"]
+known-local-folder = ["conftest"]

@@ -1,0 +1,5 @@
+# Mismas reglas que el backend; el generador de carga importa el paquete iamia.
+extend = "../../backend/pyproject.toml"
+
+[lint.isort]
+known-first-party = ["iamia"]

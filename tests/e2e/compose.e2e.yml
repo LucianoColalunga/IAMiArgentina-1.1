@@ -1,0 +1,174 @@
+# Entorno de punta a punta: la plataforma completa con los 8 canales habilitados, apuntando a
+# simuladores en lugar de las plataformas reales y del modelo. Se usa junto al compose principal:
+#
+#   scripts/e2e.sh            (genera secretos de prueba, levanta todo, corre las pruebas y apaga)
+#
+# Los secretos salen de tests/e2e/.env.e2e, que el script genera en cada máquina y nunca se versiona.
+
+x-e2e-env: &e2e-env
+  APP_ENV: staging
+  PUBLIC_BASE_URL: http://nginx
+  CHANNELS_ENABLED: webchat,telegram,whatsapp,messenger,instagram,x,sms,email
+  DATA_ENCRYPTION_KEYS: ${DATA_ENCRYPTION_KEYS}
+  PSEUDONYMIZATION_KEY: ${PSEUDONYMIZATION_KEY}
+  EDGE_SHARED_SECRET: ${EDGE_SHARED_SECRET}
+  WEBCHAT_TOKEN_SECRET: ${WEBCHAT_TOKEN_SECRET}
+  OIDC_PUBLIC_KEY_PATH: /keys/oidc-dev-public.pem
+  # Modelo simulado (API compatible con OpenAI)
+  LLM_BASE_URL: http://mock-ai:9001/v1
+  LLM_MODEL: mock-chat
+  EMBEDDINGS_BASE_URL: http://mock-ai:9001/v1
+  EMBEDDINGS_MODEL: mock-embeddings
+  EMBEDDING_DIMENSIONS: "256"
+  # Los embeddings simulados son una bolsa de palabras: el umbral de relevancia se calibra para ellos.
+  MIN_RELEVANCE_SCORE: "0.3"
+  # Plataformas simuladas
+  TELEGRAM_API_BASE_URL: http://platforms:9000
+  TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+  TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET}
+  META_GRAPH_BASE_URL: http://platforms:9000
+  WHATSAPP_PHONE_NUMBER_ID: "100000000000001"
+  WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN}
+  WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET}
+  WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN}
+  MESSENGER_PAGE_ID: "200000000000002"
+  MESSENGER_PAGE_ACCESS_TOKEN: ${MESSENGER_PAGE_ACCESS_TOKEN}
+  MESSENGER_APP_SECRET: ${MESSENGER_APP_SECRET}
+  MESSENGER_VERIFY_TOKEN: ${MESSENGER_VERIFY_TOKEN}
+  INSTAGRAM_ACCOUNT_ID: "17841400000000003"
+  INSTAGRAM_ACCESS_TOKEN: ${INSTAGRAM_ACCESS_TOKEN}
+  INSTAGRAM_APP_SECRET: ${INSTAGRAM_APP_SECRET}
+  INSTAGRAM_VERIFY_TOKEN: ${INSTAGRAM_VERIFY_TOKEN}
+  X_API_BASE_URL: http://platforms:9000
+  X_ACCOUNT_ID: "3000"
+  X_WEBHOOK_SECRET: ${X_WEBHOOK_SECRET}
+  X_TOKEN_MODE: static
+  X_USER_ACCESS_TOKEN: ${X_USER_ACCESS_TOKEN}
+  TWILIO_API_BASE_URL: http://platforms:9000
+  TWILIO_ACCOUNT_SID: AC00000000000000000000000000000000
+  TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+  TWILIO_FROM_NUMBER: "+15005550006"
+  SMS_WEBHOOK_URL: http://nginx/webhooks/sms
+  EMAIL_INBOUND_SECRET: ${EMAIL_INBOUND_SECRET}
+  EMAIL_FROM_ADDRESS: asistente@iamia.test
+  SMTP_HOST: platforms
+  SMTP_PORT: "2525"
+  SMTP_STARTTLS: "false"
+  # Tiempos cortos para que las pruebas de resiliencia no esperen minutos.
+  CHANNEL_BREAKER_FAILURES: "3"
+  CHANNEL_BREAKER_RESET_SECONDS: "5"
+  LLM_BREAKER_RESET_SECONDS: "5"
+  SWEEPER_INTERVAL_SECONDS: "5"
+  WEBCHAT_LONG_POLL_SECONDS: "10"
+  RATE_LIMIT_PER_MINUTE: "1000"
+  CONTACT_MESSAGES_PER_MINUTE: "60"
+  LOG_LEVEL: INFO
+  # Trazas de OpenTelemetry al simulador de plataformas, que hace de colector OTLP. Las pruebas
+  # de carga las apagan (scripts/load.sh deja E2E_OTLP_ENDPOINT vacío) para medir lo mismo que antes.
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${E2E_OTLP_ENDPOINT-http://platforms:9000}
+
+x-keys: &keys
+  - ./tests/e2e/.dev-keys:/keys:ro
+
+x-simulator: &simulator
+  image: iamia/backend:test
+  volumes:
+    - ./tests/e2e/simulators:/sim:ro
+  read_only: true
+  tmpfs: [/tmp]
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+
+services:
+  platforms:
+    <<: *simulator
+    command: ["python", "-m", "uvicorn", "platforms:app", "--app-dir", "/sim", "--host", "0.0.0.0", "--port", "9000", "--no-access-log"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  mock-ai:
+    <<: *simulator
+    command: ["python", "-m", "uvicorn", "mock_ai:app", "--app-dir", "/sim", "--host", "0.0.0.0", "--port", "9001", "--no-access-log"]
+    environment:
+      MOCK_EMBEDDING_DIMENSIONS: "256"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9001/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    environment: *e2e-env
+
+  ingest:
+    environment: *e2e-env
+    depends_on:
+      mock-ai:
+        condition: service_healthy
+
+  api:
+    environment: *e2e-env
+    volumes: *keys
+    depends_on:
+      platforms:
+        condition: service_healthy
+
+  worker:
+    environment: *e2e-env
+    depends_on:
+      ingest:
+        condition: service_completed_successfully
+
+  dispatcher:
+    environment: *e2e-env
+    depends_on:
+      platforms:
+        condition: service_healthy
+
+  maintenance:
+    environment: *e2e-env
+
+  nginx:
+    environment:
+      EDGE_SHARED_SECRET: ${EDGE_SHARED_SECRET}
+
+  # Corredor de las pruebas (docker compose run --rm e2e). Firma los webhooks como lo haría
+  # cada plataforma, consulta la bandeja del simulador y usa la consola con tokens de desarrollo.
+  e2e:
+    image: iamia/backend:test
+    profiles: ["e2e"]
+    working_dir: /e2e
+    command: ["python", "-m", "pytest", "/e2e/tests", "-p", "no:cacheprovider", "-v", "--junitxml=/results/e2e-junit.xml"]
+    volumes:
+      - ./tests/e2e:/e2e:ro
+      - ./tests/e2e/.dev-keys:/keys:ro
+      - ./tests/e2e/results:/results
+    environment:
+      <<: *e2e-env
+      E2E_BASE_URL: http://nginx
+      E2E_PLATFORMS_URL: http://platforms:9000
+      E2E_AI_URL: http://mock-ai:9001
+      E2E_KEY_DIR: /keys
+    depends_on:
+      nginx:
+        condition: service_started
+
+  # Generador de carga (docker compose run --rm load ...): ver tests/load/README.md.
+  load:
+    image: iamia/backend:test
+    profiles: ["load"]
+    working_dir: /load
+    entrypoint: ["python", "/load/load_test.py"]
+    volumes:
+      - ./tests/load:/load:ro
+      - ./tests/load/results:/results
+    environment:
+      <<: *e2e-env
+      E2E_BASE_URL: http://nginx
+      E2E_PLATFORMS_URL: http://platforms:9000
+    depends_on:
+      nginx:
+        condition: service_started

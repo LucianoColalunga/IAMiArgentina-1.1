@@ -1,0 +1,59 @@
+# Loki 3.x monolítico (un solo binario) con almacenamiento en disco, para el stack de compose.
+# Montaje esperado: ./loki/loki-config.yml -> /etc/loki/config.yml
+#   (comando: -config.file=/etc/loki/config.yml; volumen persistente en /loki)
+# Retención: 30 días, la aplica el compactor. Para más volumen o HA, usar el chart oficial en
+# modo simple scalable con un bucket S3: este archivo no escala más allá de una máquina.
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+
+schema_config:
+  configs:
+    - from: "2025-01-01"
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  retention_period: 720h
+  max_query_lookback: 720h
+  # request_id, trace_id y message_id llegan como structured metadata (ver alloy/config.alloy):
+  # se filtran igual en LogQL sin crear una serie por mensaje.
+  allow_structured_metadata: true
+  volume_enabled: true
+  ingestion_rate_mb: 8
+  ingestion_burst_size_mb: 16
+
+compactor:
+  working_directory: /loki/compactor
+  retention_enabled: true
+  retention_delete_delay: 2h
+  delete_request_store: filesystem
+
+query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100
+
+analytics:
+  reporting_enabled: false

@@ -1,0 +1,13 @@
+# Un nodo de RabbitMQ por vez: con 3 nodos las colas quorum mantienen mayoría.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: iamia-rabbitmq
+  labels:
+    app.kubernetes.io/name: rabbitmq
+    app.kubernetes.io/component: messaging
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: iamia-rabbitmq

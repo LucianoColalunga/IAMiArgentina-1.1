@@ -1,0 +1,89 @@
+// Grafana Alloy: junta los logs de los contenedores del proyecto de compose y los manda a Loki.
+// Montajes esperados:
+//   ./alloy/config.alloy  -> /etc/alloy/config.alloy
+//   /var/run/docker.sock  -> /var/run/docker.sock (solo lectura)
+//
+// Labels de Loki: solo valores acotados (service, container, level, role, channel).
+// request_id, trace_id y message_id cambian en cada mensaje: van como structured metadata y se
+// filtran con  {service="worker"} | trace_id="..."  sin crear una serie por mensaje.
+
+discovery.docker "compose" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "15s"
+
+  // Solo los contenedores del proyecto (docker-compose.yml declara "name: iamia").
+  filter {
+    name   = "label"
+    values = ["com.docker.compose.project=iamia"]
+  }
+}
+
+// Reglas que usa loki.source.docker para armar los labels de cada contenedor.
+discovery.relabel "compose" {
+  targets = []
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+}
+
+loki.source.docker "compose" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.compose.targets
+  relabel_rules = discovery.relabel.compose.rules
+  forward_to    = [loki.process.iamia.receiver]
+}
+
+loki.process "iamia" {
+  forward_to = [loki.write.loki.receiver]
+
+  // La app escribe una línea JSON por evento (backend/iamia/core/logs.py). Las líneas que no son
+  // JSON (PostgreSQL, RabbitMQ, nginx) siguen de largo solo con service y container.
+  stage.json {
+    expressions = {
+      level      = "level",
+      role       = "role",
+      channel    = "channel",
+      request_id = "request_id",
+      trace_id   = "trace_id",
+      message_id = "message_id",
+      ts         = "ts",
+    }
+  }
+
+  // "ts" es ISO 8601 con milisegundos y zona (2026-01-01T12:00:00.123+00:00).
+  stage.timestamp {
+    source            = "ts"
+    format            = "RFC3339"
+    action_on_failure = "skip"
+  }
+
+  stage.labels {
+    values = {
+      level   = "",
+      role    = "",
+      channel = "",
+    }
+  }
+
+  stage.structured_metadata {
+    values = {
+      request_id = "",
+      trace_id   = "",
+      message_id = "",
+    }
+  }
+}
+
+loki.write "loki" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

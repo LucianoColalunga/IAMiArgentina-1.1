@@ -1,0 +1,71 @@
+# RabbitMQ. Entran: los roles de la app (AMQP), KEDA (largo de colas), el Messaging Topology
+# Operator (API de management) y los otros nodos (epmd, distribución Erlang, herramientas CLI).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rabbitmq
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: iamia-rabbitmq
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values: ["iamia"]
+              - key: app.kubernetes.io/component
+                operator: In
+                values: ["api", "worker", "dispatcher", "maintenance"]
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: keda
+      ports:
+        - protocol: TCP
+          port: 5672
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: rabbitmq-system
+      ports:
+        - protocol: TCP
+          port: 15672
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: iamia-rabbitmq
+      ports:
+        - protocol: TCP
+          port: 4369
+        - protocol: TCP
+          port: 25672
+        - protocol: TCP
+          port: 35672
+          endPort: 35682
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: iamia-rabbitmq
+      ports:
+        - protocol: TCP
+          port: 4369
+        - protocol: TCP
+          port: 25672
+        - protocol: TCP
+          port: 35672
+          endPort: 35682
+    # Descubrimiento de pares de versiones que consultan la API de Kubernetes (en 4.x ya no
+    # hace falta: si se confirma con la versión fijada, se puede quitar).
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443

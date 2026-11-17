@@ -1,0 +1,15 @@
+# Credenciales de KEDA para leer el largo de las colas: la misma AMQP_URL de la app.
+# Tiene que ir con FQDN (iamia-rabbitmq.iamia.svc) porque KEDA conecta desde su namespace.
+# Alternativa más restrictiva: un usuario aparte sin permisos de configure/write/read
+# (la consulta pasiva de una cola no los necesita).
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: rabbitmq-iamia
+  labels:
+    app.kubernetes.io/name: iamia
+spec:
+  secretTargetRef:
+    - parameter: host
+      name: iamia-secrets
+      key: AMQP_URL

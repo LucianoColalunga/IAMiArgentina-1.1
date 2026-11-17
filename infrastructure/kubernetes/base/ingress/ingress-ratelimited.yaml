@@ -1,0 +1,43 @@
+# /v1/chat y /webchat: abiertos a cualquiera, con límite por IP como primera barrera (la app
+# tiene además sus propios cupos por IP y por sesión). Valores generosos: con CGNAT muchos
+# usuarios móviles comparten la misma IP pública. Para que el límite sea por cliente, el
+# controlador tiene que ver la IP real (ver README, configuración del controlador).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: iamia-public-limited
+  labels:
+    app.kubernetes.io/name: iamia
+    app.kubernetes.io/component: api
+  annotations:
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: 3m
+    nginx.ingress.kubernetes.io/limit-rps: "10"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
+    nginx.ingress.kubernetes.io/limit-connections: "50"
+    # /v1/chat espera al LLM (hasta 60 s) y el long polling del chat web dura 25 s.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "90"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - asistente.example.org
+      secretName: asistente-tls
+  rules:
+    - host: asistente.example.org
+      http:
+        paths:
+          - path: /v1/chat
+            pathType: Exact
+            backend:
+              service:
+                name: api
+                port:
+                  name: http
+          - path: /webchat
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  name: http

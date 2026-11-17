@@ -1,0 +1,147 @@
+# Escalado por largo de cola (mensajes listos) con KEDA. KEDA crea y maneja el HPA de cada uno.
+# "value" es la cantidad de mensajes en espera que se tolera por réplica.
+#
+# Worker: cada réplica procesa INBOUND_PREFETCH (8) mensajes a la vez. Más workers que la
+# capacidad de vLLM no acelera nada, solo mueve la espera de lugar:
+#   maxReplicaCount ~ (réplicas llm x pedidos concurrentes útiles por réplica) / 8
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: worker
+  labels:
+    app.kubernetes.io/name: iamia
+    app.kubernetes.io/component: worker
+spec:
+  scaleTargetRef:
+    name: worker
+  minReplicaCount: 2
+  maxReplicaCount: 24
+  pollingInterval: 15
+  cooldownPeriod: 300
+  # Si KEDA no puede leer la cola (RabbitMQ caído), deja una cantidad razonable de réplicas.
+  fallback:
+    failureThreshold: 3
+    replicas: 4
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+            - type: Percent
+              value: 50
+              periodSeconds: 60
+  triggers:
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        mode: QueueLength
+        queueName: iamia.inbound
+        value: "40"
+      authenticationRef:
+        name: rabbitmq-iamia
+---
+# Dispatcher de WhatsApp. El ritmo real lo pone el throttle por canal de la app (80 msg/s por
+# número): pasado cierto punto, más réplicas no envían más rápido.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: dispatcher-whatsapp
+  labels:
+    app.kubernetes.io/name: iamia
+    app.kubernetes.io/component: dispatcher
+spec:
+  scaleTargetRef:
+    name: dispatcher-whatsapp
+  minReplicaCount: 2
+  maxReplicaCount: 8
+  pollingInterval: 15
+  cooldownPeriod: 300
+  fallback:
+    failureThreshold: 3
+    replicas: 2
+  triggers:
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        mode: QueueLength
+        queueName: iamia.outbound.whatsapp
+        value: "200"
+      authenticationRef:
+        name: rabbitmq-iamia
+---
+# Dispatcher del resto: un trigger por cola; el HPA toma el máximo de todos.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: dispatcher-general
+  labels:
+    app.kubernetes.io/name: iamia
+    app.kubernetes.io/component: dispatcher
+spec:
+  scaleTargetRef:
+    name: dispatcher-general
+  minReplicaCount: 2
+  maxReplicaCount: 6
+  pollingInterval: 15
+  cooldownPeriod: 300
+  fallback:
+    failureThreshold: 3
+    replicas: 2
+  triggers:
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        mode: QueueLength
+        queueName: iamia.outbound.telegram
+        value: "100"
+      authenticationRef:
+        name: rabbitmq-iamia
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        mode: QueueLength
+        queueName: iamia.outbound.instagram
+        value: "100"
+      authenticationRef:
+        name: rabbitmq-iamia
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        mode: QueueLength
+        queueName: iamia.outbound.messenger
+        value: "100"
+      authenticationRef:
+        name: rabbitmq-iamia
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        mode: QueueLength
+        queueName: iamia.outbound.x
+        value: "100"
+      authenticationRef:
+        name: rabbitmq-iamia
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        mode: QueueLength
+        queueName: iamia.outbound.webchat
+        value: "100"
+      authenticationRef:
+        name: rabbitmq-iamia
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        mode: QueueLength
+        queueName: iamia.outbound.email
+        value: "100"
+      authenticationRef:
+        name: rabbitmq-iamia
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        mode: QueueLength
+        queueName: iamia.outbound.sms
+        value: "100"
+      authenticationRef:
+        name: rabbitmq-iamia

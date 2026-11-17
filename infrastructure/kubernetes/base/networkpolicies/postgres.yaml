@@ -1,0 +1,106 @@
+# Instancias de PostgreSQL (CNPG). Entran: el pooler, migrate/ingest (directo), las otras
+# instancias (replicación, pods de join) y el operador (puerto de estado 8000).
+# Salen: replicación entre instancias, la API de Kubernetes (el instance manager la usa) y el
+# object storage de backups. Ambas por 443/6443 a cualquier IP: acotar al CIDR del API server
+# y del object storage cuando se conozcan.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-instances
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: iamia-db
+    matchExpressions:
+      - key: cnpg.io/poolerName
+        operator: DoesNotExist
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              cnpg.io/poolerName: iamia-db-pooler-rw
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values: ["iamia"]
+              - key: app.kubernetes.io/component
+                operator: In
+                values: ["migrate", "ingest"]
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: iamia-db
+      ports:
+        - protocol: TCP
+          port: 5432
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cnpg-system
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: iamia-db
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+---
+# PgBouncer: entran los roles de la app; sale a las instancias y a la API de Kubernetes.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-pooler
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/poolerName: iamia-db-pooler-rw
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values: ["iamia"]
+              - key: app.kubernetes.io/component
+                operator: In
+                values: ["api", "worker", "dispatcher", "maintenance"]
+      ports:
+        - protocol: TCP
+          port: 5432
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: iamia-db
+            matchExpressions:
+              - key: cnpg.io/poolerName
+                operator: DoesNotExist
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443

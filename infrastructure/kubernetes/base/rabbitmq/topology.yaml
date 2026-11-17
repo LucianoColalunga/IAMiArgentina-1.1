@@ -1,0 +1,48 @@
+# vhost, usuario y permisos con el Messaging Topology Operator.
+# Exchanges, colas, reintentos y DLX los declara la app al arrancar (quorum, x-max-length con
+# reject-publish, DLX iamia.dead): todo con prefijo "iamia.", de ahí los permisos.
+apiVersion: rabbitmq.com/v1beta1
+kind: Vhost
+metadata:
+  name: iamia
+  labels:
+    app.kubernetes.io/name: rabbitmq
+    app.kubernetes.io/component: messaging
+spec:
+  name: iamia
+  defaultQueueType: quorum
+  rabbitmqClusterReference:
+    name: iamia-rabbitmq
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: User
+metadata:
+  name: iamia
+  labels:
+    app.kubernetes.io/name: rabbitmq
+    app.kubernetes.io/component: messaging
+spec:
+  # Sin tags: no entra a la UI de management.
+  tags: []
+  rabbitmqClusterReference:
+    name: iamia-rabbitmq
+  importCredentialsSecret:
+    name: iamia-rabbitmq-user
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Permission
+metadata:
+  name: iamia-vhost-iamia
+  labels:
+    app.kubernetes.io/name: rabbitmq
+    app.kubernetes.io/component: messaging
+spec:
+  vhost: iamia
+  userReference:
+    name: iamia
+  permissions:
+    configure: "^iamia\\..*"
+    write: "^iamia\\..*"
+    read: "^iamia\\..*"
+  rabbitmqClusterReference:
+    name: iamia-rabbitmq

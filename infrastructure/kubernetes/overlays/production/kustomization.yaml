@@ -1,0 +1,31 @@
+# Producción: la base tal cual (ya tiene los valores de producción) más lo propio del entorno.
+#   kubectl kustomize infrastructure/kubernetes/overlays/production
+# GPU: la base trae 6 réplicas de llm y 1 de embeddings (un servidor de 8 GPU). Con N servidores,
+# agregar un patch con llm = 6 x N y embeddings = N.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+labels:
+  - pairs:
+      iamia/environment: production
+    includeSelectors: false
+    includeTemplates: false
+
+images:
+  - name: registry.example.org/iamia/backend
+    newTag: 1.1.0
+    # Recomendado: fijar además el digest que publicó el pipeline.
+    # digest: sha256:...
+
+patches:
+  # ClusterIssuer de cert-manager del cluster de producción (nombre de ejemplo).
+  - target:
+      group: cert-manager.io
+      kind: Certificate
+    patch: |-
+      - op: replace
+        path: /spec/issuerRef/name
+        value: letsencrypt-production

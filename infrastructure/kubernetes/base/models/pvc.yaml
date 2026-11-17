@@ -1,0 +1,19 @@
+# Caché de modelos de Hugging Face compartida por todas las réplicas de vLLM (unos 35 GB entre
+# los dos modelos). Necesita ReadWriteMany (NFS, CephFS, etc.); la precarga model-download-job.yaml.
+# Alternativa en servidores GPU propios: hostPath sobre un NVMe local de cada nodo
+# (por ejemplo /var/lib/models), precargado en todos. Carga más rápido que por red, pero hay
+# que mantener la copia de cada nodo.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vllm-models
+  labels:
+    app.kubernetes.io/name: vllm
+spec:
+  accessModes:
+    - ReadWriteMany
+  # Placeholder: StorageClass RWX del cluster.
+  storageClassName: change-me-rwx
+  resources:
+    requests:
+      storage: 200Gi

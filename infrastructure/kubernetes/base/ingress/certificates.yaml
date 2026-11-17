@@ -1,0 +1,40 @@
+# Certificados TLS con cert-manager. Se declaran acá y no con la anotación en cada Ingress:
+# hay dos Ingress para asistente.example.org y cert-manager crearía Certificates en conflicto.
+# El ClusterIssuer es del cluster: placeholder en base, cada overlay pone el suyo.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: asistente-tls
+  labels:
+    app.kubernetes.io/name: iamia
+spec:
+  secretName: asistente-tls
+  dnsNames:
+    - asistente.example.org
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: change-me-cluster-issuer
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: consola-tls
+  labels:
+    app.kubernetes.io/name: iamia
+spec:
+  secretName: consola-tls
+  dnsNames:
+    - consola.example.org
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: change-me-cluster-issuer
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always

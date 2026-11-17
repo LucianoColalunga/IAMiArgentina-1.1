@@ -1,0 +1,15 @@
+# Carga los dashboards de grafana/dashboards (montado en /var/lib/grafana/dashboards).
+# Se editan en el repositorio, no en la UI: allowUiUpdates en false para que no diverjan.
+apiVersion: 1
+
+providers:
+  - name: iamia
+    orgId: 1
+    folder: IAMiArgentina
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 60
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

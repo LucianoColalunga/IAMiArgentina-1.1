@@ -1,0 +1,144 @@
+# oauth2-proxy delante de la consola (/console/) y de su API (/admin/api/), en consola.example.org.
+# Hace el login OIDC contra el IdP y reenvía a la API con "Authorization: Bearer <ID token>",
+# que la API valida (issuer, JWKS y aud = OIDC_AUDIENCE). Por eso, en el IdP:
+# - el client_id tiene que ser iamia-admin (o cambiar OIDC_AUDIENCE al client_id que se use);
+# - los roles (realm_access.roles) tienen que viajar también en el ID token.
+# La autorización fina la hace la app por roles; acá cualquier usuario del realm puede loguearse.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy
+  labels:
+    app.kubernetes.io/name: oauth2-proxy
+    app.kubernetes.io/component: auth-proxy
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: oauth2-proxy
+      app.kubernetes.io/component: auth-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: oauth2-proxy
+        app.kubernetes.io/component: auth-proxy
+    spec:
+      serviceAccountName: oauth2-proxy
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        # Usuario nonroot de la imagen distroless.
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: oauth2-proxy
+              app.kubernetes.io/component: auth-proxy
+          matchLabelKeys:
+            - pod-template-hash
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: oauth2-proxy
+              app.kubernetes.io/component: auth-proxy
+          matchLabelKeys:
+            - pod-template-hash
+      containers:
+        - name: oauth2-proxy
+          # Fijar versión probada (y digest).
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.12.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - --http-address=0.0.0.0:4180
+            - --metrics-address=0.0.0.0:44180
+            - --provider=oidc
+            - --scope=openid profile email
+            - --email-domain=*
+            - --code-challenge-method=S256
+            # Solo estas rutas llegan a la API, aunque el Ingress mande otra cosa.
+            - --upstream=http://api:8000/console/
+            - --upstream=http://api:8000/admin/api/
+            - --pass-authorization-header=true
+            - --set-authorization-header=true
+            - --reverse-proxy=true
+            - --real-client-ip-header=X-Real-IP
+            - --skip-provider-button=true
+            - --cookie-name=__Host-iamia-consola
+            - --cookie-secure=true
+            - --cookie-samesite=lax
+            - --cookie-expire=8h
+            # Refresca la sesión antes de que venza el ID token (5 min por defecto en Keycloak).
+            - --cookie-refresh=4m
+            # Los logs de pedidos traen URLs completas: quedan solo los de autenticación.
+            - --request-logging=false
+            - --silence-ping-logging=true
+          env:
+            - name: OAUTH2_PROXY_OIDC_ISSUER_URL
+              value: https://idp.example.org/realms/iamia
+            - name: OAUTH2_PROXY_REDIRECT_URL
+              value: https://consola.example.org/oauth2/callback
+            - name: OAUTH2_PROXY_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-proxy
+                  key: client-id
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-proxy
+                  key: client-secret
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-proxy
+                  key: cookie-secret
+          ports:
+            - name: http
+              containerPort: 4180
+              protocol: TCP
+            - name: metrics
+              containerPort: 44180
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]

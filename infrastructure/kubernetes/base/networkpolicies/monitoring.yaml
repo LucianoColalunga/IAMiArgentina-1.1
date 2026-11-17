@@ -1,0 +1,36 @@
+# Prometheus (kube-prometheus-stack en el namespace monitoring) puede leer los puertos de
+# métricas. Ajustar el namespace si el stack está en otro lado.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        # api (/metrics) y vLLM
+        - protocol: TCP
+          port: 8000
+        # worker, dispatcher, maintenance
+        - protocol: TCP
+          port: 9100
+        # oauth2-proxy
+        - protocol: TCP
+          port: 44180
+        # PostgreSQL (CNPG) y PgBouncer
+        - protocol: TCP
+          port: 9187
+        - protocol: TCP
+          port: 9127
+        # RabbitMQ
+        - protocol: TCP
+          port: 15692

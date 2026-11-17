@@ -1,0 +1,119 @@
+# Dispatcher solo de WhatsApp (el canal con más volumen): consume iamia.outbound.whatsapp.
+# Separado para que una demora de Meta no frene a los demás canales y para escalarlo aparte.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dispatcher-whatsapp
+  labels:
+    app.kubernetes.io/name: iamia
+    app.kubernetes.io/component: dispatcher
+    iamia/channels: whatsapp
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: iamia
+      app.kubernetes.io/component: dispatcher
+      iamia/channels: whatsapp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: iamia
+        app.kubernetes.io/component: dispatcher
+        iamia/channels: whatsapp
+    spec:
+      serviceAccountName: iamia
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: iamia
+              app.kubernetes.io/component: dispatcher
+              iamia/channels: whatsapp
+          matchLabelKeys:
+            - pod-template-hash
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: iamia
+              app.kubernetes.io/component: dispatcher
+              iamia/channels: whatsapp
+          matchLabelKeys:
+            - pod-template-hash
+      containers:
+        - name: dispatcher
+          image: registry.example.org/iamia/backend:1.1.0
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "iamia"]
+          args: ["dispatcher", "--channels", "whatsapp"]
+          ports:
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: iamia-config
+            - secretRef:
+                name: iamia-secrets
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: metrics
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi

@@ -1,0 +1,76 @@
+# Proxy de borde delante de la API. La imagen oficial de nginx procesa este template con
+# envsubst al arrancar (solo variables definidas: EDGE_SHARED_SECRET).
+
+# Los logs no incluyen la query string: la verificación de webhooks de Meta trae el verify token
+# en la URL y el long polling del chat web trae el número de secuencia.
+log_format iamia '$remote_addr [$time_local] "$request_method $uri $server_protocol" '
+                 '$status $body_bytes_sent $request_time "$http_user_agent"';
+access_log /dev/stdout iamia;
+server_tokens off;
+
+# Límites por IP en el borde (la API aplica además los suyos por contacto y por cliente).
+limit_req_zone $binary_remote_addr zone=consultas:10m rate=2r/s;
+limit_req_zone $binary_remote_addr zone=chatweb:10m rate=10r/s;
+limit_req_status 429;
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      '';
+}
+
+# "api" se resuelve con el DNS interno de Docker y se vuelve a resolver cada 5 s. Con la
+# resolución fija al arrancar, cuando la API se recreaba (por ejemplo, al actualizar la imagen)
+# cambiaba de IP y nginx seguía mandando a la vieja: todo 502 hasta reiniciar nginx.
+resolver 127.0.0.11 valid=5s ipv6=off;
+
+upstream iamia_api {
+    zone iamia_api 64k;
+    server api:8000 resolve;
+    keepalive 64;
+}
+
+server {
+    listen 80;
+    server_name _;
+
+    client_max_body_size 3m;
+    client_body_timeout 15s;
+    send_timeout 30s;
+
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Edge-Auth "${EDGE_SHARED_SECRET}";
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 30s;
+
+    # Métricas solo para Prometheus dentro de la red interna.
+    location = /metrics { return 404; }
+
+    # Webhooks de las plataformas: sin límite por IP (vienen de pocas IPs y reintentan).
+    location /webhooks/ {
+        proxy_pass http://iamia_api;
+    }
+
+    # API de consulta directa (compatible con la versión 1).
+    location = /v1/chat {
+        limit_req zone=consultas burst=10 nodelay;
+        proxy_read_timeout 75s;
+        proxy_pass http://iamia_api;
+    }
+
+    # Chat web: el GET de mensajes es long polling (hasta 25 s).
+    location /webchat/ {
+        limit_req zone=chatweb burst=20 nodelay;
+        proxy_read_timeout 40s;
+        proxy_buffering off;
+        proxy_pass http://iamia_api;
+    }
+
+    location / {
+        proxy_pass http://iamia_api;
+    }
+}

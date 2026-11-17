@@ -1,0 +1,79 @@
+# Migraciones del esquema (python -m iamia migrate). Tienen que terminar ANTES de desplegar una
+# versión nueva de la app, y kustomize no ordena recursos. Por eso:
+# - Con Argo CD: hook de Sync en la ola 1 (dependencias en la 0, roles de la app en la 2).
+#   No se usa PreSync porque en la primera instalación correría antes de que exista la base.
+# - Sin Argo CD: el pipeline borra el Job anterior, aplica este, espera "complete" y recién
+#   después aplica el resto (comandos en el README).
+# Las migraciones toman un advisory lock: si hubiera dos corridas a la vez, una espera.
+# Las migraciones tienen que ser compatibles hacia atrás (los pods viejos siguen andando).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+  labels:
+    app.kubernetes.io/name: iamia
+    app.kubernetes.io/component: migrate
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  backoffLimit: 4
+  activeDeadlineSeconds: 1800
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: iamia
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      serviceAccountName: iamia
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: registry.example.org/iamia/backend:1.1.0
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "iamia"]
+          args: ["migrate"]
+          envFrom:
+            - configMapRef:
+                name: iamia-config
+            - secretRef:
+                name: iamia-secrets
+          env:
+            # Directo al primario y no por el pooler: la migración fija su propio
+            # statement_timeout (30 min, índices HNSW) al conectar y PgBouncer no lo reenvía.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: iamia-secrets
+                  key: DATABASE_URL_DIRECT
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi

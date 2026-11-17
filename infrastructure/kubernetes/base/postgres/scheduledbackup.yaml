@@ -1,0 +1,19 @@
+# Base backup diario. El cron de CNPG lleva segundos y corre en UTC: 03:00 UTC = 00:00 en
+# Argentina. Se toma de una réplica si hay una sana (no carga al primario).
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: iamia-db-daily
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: database
+spec:
+  schedule: "0 0 3 * * *"
+  immediate: true
+  backupOwnerReference: self
+  target: prefer-standby
+  cluster:
+    name: iamia-db
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io

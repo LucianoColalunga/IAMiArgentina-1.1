@@ -1,0 +1,57 @@
+# Dispatchers: datos, cola, APIs de las plataformas (HTTPS) y SMTP de salida (587).
+# Una NetworkPolicy estándar no filtra por nombre de dominio; para limitar a los dominios de
+# cada plataforma hace falta una política FQDN del CNI (Cilium, Calico) o un proxy de salida.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dispatcher
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: iamia
+      app.kubernetes.io/component: dispatcher
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/poolerName: iamia-db-pooler-rw
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: iamia-rabbitmq
+      ports:
+        - protocol: TCP
+          port: 5672
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+              - 100.64.0.0/10
+      ports:
+        - protocol: TCP
+          port: 443
+    # El relay SMTP puede estar en la red interna: acá no se excluyen rangos privados.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 587

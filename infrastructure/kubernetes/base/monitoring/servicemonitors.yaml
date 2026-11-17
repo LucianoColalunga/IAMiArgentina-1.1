@@ -1,0 +1,73 @@
+# ServiceMonitors para kube-prometheus-stack. La etiqueta "release" es la que usa por defecto
+# el serviceMonitorSelector del chart: ajustarla al nombre del release instalado.
+# jobLabel toma el job de la etiqueta app.kubernetes.io/component del Service, así los nombres
+# de job coinciden con los del Prometheus de docker compose y las reglas sirven en los dos.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: iamia-api
+  labels:
+    app.kubernetes.io/name: iamia
+    release: kube-prometheus-stack
+spec:
+  jobLabel: app.kubernetes.io/component
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: iamia
+      app.kubernetes.io/component: api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+---
+# RabbitMQ: /metrics (agregado) y /metrics/detailed con las métricas por cola que usan las
+# alertas y el dashboard. El segundo endpoint se renombra a job=rabbitmq-detailed para que sus
+# series "up" no choquen con las del primero.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: iamia-rabbitmq
+  labels:
+    app.kubernetes.io/name: rabbitmq
+    release: kube-prometheus-stack
+spec:
+  jobLabel: app.kubernetes.io/component
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: iamia-rabbitmq
+      app.kubernetes.io/component: rabbitmq
+  endpoints:
+    - port: prometheus
+      path: /metrics
+      interval: 30s
+    - port: prometheus
+      path: /metrics/detailed
+      interval: 30s
+      params:
+        family:
+          - queue_coarse_metrics
+        vhost:
+          - iamia
+      relabelings:
+        - action: replace
+          targetLabel: job
+          replacement: rabbitmq-detailed
+---
+# vLLM expone /metrics en el mismo puerto (métricas vllm:*: cola, KV cache, tokens/s).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: vllm
+  labels:
+    app.kubernetes.io/name: vllm
+    release: kube-prometheus-stack
+spec:
+  jobLabel: app.kubernetes.io/component
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vllm
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

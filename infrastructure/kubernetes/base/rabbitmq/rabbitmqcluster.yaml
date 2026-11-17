@@ -1,0 +1,54 @@
+# RabbitMQ 4.x con el Cluster Operator. 3 nodos en hosts distintos: las colas quorum (las
+# declara la app) siguen funcionando con 1 de los 3 caído.
+# El operador ya define pause_minority, la memoria según el límite del contenedor y un preStop
+# que espera a que las colas quorum no queden en riesgo antes de bajar un nodo (por eso el
+# terminationGracePeriod del StatefulSet es largo; no achicarlo).
+apiVersion: rabbitmq.com/v1beta1
+kind: RabbitmqCluster
+metadata:
+  name: iamia-rabbitmq
+  labels:
+    app.kubernetes.io/name: rabbitmq
+    app.kubernetes.io/component: messaging
+spec:
+  replicas: 3
+  # Fijar versión probada (y digest).
+  image: rabbitmq:4.3-management
+  resources:
+    requests:
+      cpu: "1"
+      memory: 4Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+  persistence:
+    # Sin storageClassName usa la default del cluster: conviene SSD.
+    storage: 50Gi
+  rabbitmq:
+    additionalPlugins:
+      # El operador ya lo habilita; queda explícito porque las alertas y KEDA dependen de él.
+      - rabbitmq_prometheus
+    additionalConfig: |
+      # Métricas por cola solo en /metrics/detailed; /metrics queda agregado (baja cardinalidad).
+      prometheus.return_per_object_metrics = false
+      disk_free_limit.absolute = 2GB
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: iamia-rabbitmq
+  override:
+    statefulSet:
+      spec:
+        template:
+          spec:
+            containers: []
+            topologySpreadConstraints:
+              - maxSkew: 1
+                topologyKey: topology.kubernetes.io/zone
+                whenUnsatisfiable: ScheduleAnyway
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: iamia-rabbitmq

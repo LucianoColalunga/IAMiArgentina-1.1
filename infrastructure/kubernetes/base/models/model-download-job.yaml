@@ -1,0 +1,81 @@
+# Precarga de los modelos en la caché compartida (PVC vllm-models).
+# NO está en kustomization.yaml: se aplica a mano una vez, y otra vez cada vez que cambia un
+# modelo, antes de levantar vLLM:
+#   kubectl -n iamia apply -f infrastructure/kubernetes/base/models/model-download-job.yaml
+#   kubectl -n iamia wait --for=condition=complete job/vllm-model-download --timeout=2h
+# Es el único pod de modelos con salida a internet (networkpolicies/models.yaml).
+# Por no pasar por kustomize lleva namespace y etiquetas propias.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vllm-model-download
+  namespace: iamia
+  labels:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/component: model-download
+    app.kubernetes.io/part-of: iamia
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 7200
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vllm
+        app.kubernetes.io/component: model-download
+        app.kubernetes.io/part-of: iamia
+    spec:
+      restartPolicy: Never
+      serviceAccountName: vllm
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: download
+          # Misma imagen que vLLM (trae huggingface_hub).
+          image: vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "-c"]
+          args:
+            - |
+              from huggingface_hub import snapshot_download
+              for repo in ("Qwen/Qwen3-30B-A3B-Instruct-2507-FP8", "BAAI/bge-m3"):
+                  print("descargado", repo, snapshot_download(repo))
+          env:
+            - name: HF_HOME
+              value: /models/huggingface
+            - name: HOME
+              value: /tmp/home
+            # Si algún modelo pidiera aceptar licencia, agregar HF_TOKEN desde un Secret.
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: vllm-models
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi

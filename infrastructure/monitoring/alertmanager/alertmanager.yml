@@ -1,0 +1,55 @@
+# Alertmanager de IAMiArgentina. Destinos de ejemplo: las direcciones reales y la URL del
+# sistema de guardias se cargan al desplegar. Las credenciales se leen de archivos montados
+# (/etc/alertmanager/secrets), nunca van en este archivo.
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: smtp.example.org:587
+  smtp_from: alertas@example.org
+  smtp_auth_username: CHANGE_ME
+  smtp_auth_password_file: /etc/alertmanager/secrets/smtp_password
+  smtp_require_tls: true
+
+route:
+  receiver: equipo-plataforma
+  # Una notificación por alerta y severidad (agrupa, por ejemplo, todos los canales afectados).
+  group_by: ["alertname", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - receiver: guardia
+      matchers:
+        - severity="critical"
+      group_wait: 10s
+      repeat_interval: 1h
+    - receiver: equipo-plataforma
+      matchers:
+        - severity="warning"
+      repeat_interval: 12h
+
+inhibit_rules:
+  # Si la misma alerta ya está en critical, no avisar también la warning.
+  - source_matchers:
+      - severity="critical"
+    target_matchers:
+      - severity="warning"
+    equal: ["alertname", "channel", "queue"]
+  # Sin LLM, la latencia del LLM y los bloqueos por llm_busy/llm_circuit_open son consecuencia.
+  - source_matchers:
+      - alertname="IamiaLLMCircuitOpen"
+    target_matchers:
+      - alertname=~"IamiaLLMLatencyHigh|IamiaAIBlockedSpike"
+
+receivers:
+  - name: equipo-plataforma
+    email_configs:
+      - to: equipo-plataforma@example.org
+        send_resolved: true
+  - name: guardia
+    email_configs:
+      - to: guardia@example.org
+        send_resolved: true
+    # Puente al sistema de guardias. La URL (suele llevar un token) va en un archivo montado.
+    webhook_configs:
+      - url_file: /etc/alertmanager/secrets/guardia_webhook_url
+        send_resolved: true

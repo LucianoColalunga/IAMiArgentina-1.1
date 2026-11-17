@@ -1,0 +1,14 @@
+# CNPG ya crea los PDB de las instancias de PostgreSQL; el del pooler va acá.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: iamia-db-pooler-rw
+  labels:
+    app.kubernetes.io/name: pgbouncer
+    app.kubernetes.io/component: database-pooler
+spec:
+  maxUnavailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      cnpg.io/poolerName: iamia-db-pooler-rw

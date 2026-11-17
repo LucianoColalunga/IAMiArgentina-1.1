@@ -1,0 +1,47 @@
+# PostgreSQL de staging: 2 instancias y replicación sincrónica "si se puede" (minSyncReplicas 0):
+# con una sola réplica, si cae, el primario sigue aceptando escrituras.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: iamia-db
+spec:
+  instances: 2
+  minSyncReplicas: 0
+  maxSyncReplicas: 1
+  postgresql:
+    parameters:
+      max_connections: "200"
+      shared_buffers: 512MB
+      effective_cache_size: 1536MB
+      maintenance_work_mem: 256MB
+  storage:
+    size: 20Gi
+  walStorage:
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Pooler
+metadata:
+  name: iamia-db-pooler-rw
+spec:
+  instances: 1
+  pgbouncer:
+    parameters:
+      default_pool_size: "80"
+      reserve_pool_size: "10"
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: iamia-db-backups
+spec:
+  retentionPolicy: 7d
+  configuration:
+    destinationPath: s3://CHANGE_ME/iamia-db-staging/

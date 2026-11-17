@@ -1,0 +1,76 @@
+# Prometheus del stack de docker compose.
+# Montajes esperados en el contenedor:
+#   ./prometheus/prometheus.yml -> /etc/prometheus/prometheus.yml
+#   ./prometheus/rules          -> /etc/prometheus/rules
+# Los nombres de job son los mismos que en Kubernetes (ServiceMonitor/PodMonitor): las reglas
+# y los dashboards sirven en los dos entornos.
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 30s
+  external_labels:
+    environment: local
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Los roles se descubren por DNS (registro A del servicio de compose): con
+  # "docker compose up --scale worker=3" se leen todas las réplicas, no una al azar.
+  - job_name: api
+    metrics_path: /metrics
+    dns_sd_configs:
+      - names: ["api"]
+        type: A
+        port: 8000
+        refresh_interval: 30s
+
+  - job_name: worker
+    dns_sd_configs:
+      - names: ["worker"]
+        type: A
+        port: 9100
+        refresh_interval: 30s
+
+  # Si en compose hay un servicio por grupo de canales, agregar sus nombres a la lista.
+  - job_name: dispatcher
+    dns_sd_configs:
+      - names: ["dispatcher"]
+        type: A
+        port: 9100
+        refresh_interval: 30s
+
+  - job_name: maintenance
+    dns_sd_configs:
+      - names: ["maintenance"]
+        type: A
+        port: 9100
+        refresh_interval: 30s
+
+  # RabbitMQ: métricas agregadas.
+  - job_name: rabbitmq
+    static_configs:
+      - targets: ["rabbitmq:15692"]
+
+  # RabbitMQ: métricas por cola (rabbitmq_detailed_queue_*) del vhost de la app.
+  - job_name: rabbitmq-detailed
+    metrics_path: /metrics/detailed
+    params:
+      family: ["queue_coarse_metrics"]
+      vhost: ["iamia"]
+    static_configs:
+      - targets: ["rabbitmq:15692"]
+
+  # Opcional: span metrics del OpenTelemetry Collector (ver otel/otel-collector.yml).
+  # - job_name: otel-collector
+  #   static_configs:
+  #     - targets: ["otel-collector:8889"]

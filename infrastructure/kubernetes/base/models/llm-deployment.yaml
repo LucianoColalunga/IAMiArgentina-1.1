@@ -1,0 +1,157 @@
+# LLM servido con vLLM (API compatible con OpenAI). Una GPU por réplica.
+# Punto de partida por servidor de 8 GPU: 6 réplicas de llm + 1 de embeddings; queda 1 GPU
+# libre para el pod extra del rolling update. Con N servidores: llm = 6 x N, embeddings = N.
+# Ajustar con pruebas de carga (latencia p95 del LLM y tokens/s en el dashboard de IA).
+# Sin salida a internet: el modelo se lee de la caché precargada (HF_HUB_OFFLINE=1).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm
+  labels:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/component: llm
+spec:
+  replicas: 6
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vllm
+      app.kubernetes.io/component: llm
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vllm
+        app.kubernetes.io/component: llm
+    spec:
+      serviceAccountName: vllm
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 60
+      # Etiqueta que pone GPU Feature Discovery (GPU Operator) y taint habitual de nodos GPU.
+      # Si el cluster lo requiere, agregar runtimeClassName: nvidia.
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: vllm
+              app.kubernetes.io/component: llm
+          matchLabelKeys:
+            - pod-template-hash
+      containers:
+        - name: vllm
+          # Fijada por digest: los flags cambian entre versiones de vLLM, validar antes de actualizar.
+          image: vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e
+          imagePullPolicy: IfNotPresent
+          command: ["vllm", "serve"]
+          args:
+            - Qwen/Qwen3-30B-A3B-Instruct-2507-FP8
+            - --host=0.0.0.0
+            - --port=8000
+            - --max-model-len=8192
+            - --gpu-memory-utilization=0.90
+            - --enable-prefix-caching
+          env:
+            # Con VLLM_API_KEY las rutas /v1 piden la misma clave que manda la app (LLM_API_KEY).
+            # /health y /metrics quedan abiertas (probes y Prometheus).
+            - name: VLLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: iamia-secrets
+                  key: LLM_API_KEY
+            - name: HF_HOME
+              value: /models/huggingface
+            - name: HF_HUB_OFFLINE
+              value: "1"
+            # Raíz de solo lectura: todas las cachés de compilación (torch, triton, etc.) a /tmp.
+            # Si la versión fijada escribe en otra ruta, montar un emptyDir ahí.
+            - name: HOME
+              value: /tmp/home
+            - name: XDG_CACHE_HOME
+              value: /tmp/cache
+            - name: NUMBA_CACHE_DIR
+              value: /tmp/numba
+            - name: VLLM_NO_USAGE_STATS
+              value: "1"
+            - name: DO_NOT_TRACK
+              value: "1"
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          # Cargar el modelo y compilar puede tardar varios minutos: hasta 30 min de margen.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 180
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: "4"
+              memory: 32Gi
+              nvidia.com/gpu: 1
+            limits:
+              cpu: "8"
+              memory: 64Gi
+              nvidia.com/gpu: 1
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: vllm-models
+            readOnly: true
+        - name: tmp
+          emptyDir:
+            sizeLimit: 20Gi
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi

@@ -1,0 +1,134 @@
+# Observabilidad para una instalación con docker compose: métricas (Prometheus + Alertmanager),
+# tableros (Grafana), logs (Loki + Alloy) y trazas (OpenTelemetry Collector + Tempo).
+# Se suma al compose principal:
+#
+#   docker compose --env-file .env --env-file .env.observability \
+#     -f docker-compose.yml -f compose.observability.yml up -d
+#
+# Los secretos de esta parte van en .env.observability (ver .env.observability.example), separados
+# del .env de la aplicación. Grafana queda solo en http://127.0.0.1:3000. En un
+# servidor se publica detrás del nginx del borde con autenticación, nunca directo. Las reglas,
+# los tableros y la explicación de cada pieza están en infrastructure/monitoring/README.md.
+# Versiones fijadas a noviembre de 2026: actualizarlas con el resto de las dependencias.
+
+x-observability: &observability
+  restart: unless-stopped
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  tmpfs: [/tmp]
+
+services:
+  prometheus:
+    <<: *observability
+    image: prom/prometheus:v3.16.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      # Sin --web.enable-lifecycle ni --web.enable-admin-api: nadie puede apagarlo ni borrar datos por HTTP.
+    volumes:
+      - ./infrastructure/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/monitoring/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    read_only: true
+
+  alertmanager:
+    <<: *observability
+    image: prom/alertmanager:v0.35.0
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./infrastructure/monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    # Credenciales en archivos montados desde variables del .env, nunca en el YAML versionado.
+    secrets:
+      - source: alertmanager_smtp_password
+        target: /etc/alertmanager/secrets/smtp_password
+      - source: alertmanager_guardia_webhook
+        target: /etc/alertmanager/secrets/guardia_webhook_url
+    read_only: true
+
+  grafana:
+    <<: *observability
+    image: grafana/grafana:13.3.1
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?definir GRAFANA_ADMIN_PASSWORD en .env.observability}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SECURITY_COOKIE_SECURE: ${GRAFANA_COOKIE_SECURE:-false}
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+    volumes:
+      - ./infrastructure/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infrastructure/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on: [prometheus, loki]
+
+  loki:
+    <<: *observability
+    image: grafana/loki:3.7.10
+    command: ["-config.file=/etc/loki/config.yml"]
+    volumes:
+      - ./infrastructure/monitoring/loki/loki-config.yml:/etc/loki/config.yml:ro
+      - loki-data:/loki
+    read_only: true
+
+  # Lee los logs de los contenedores del proyecto. El socket de Docker equivale a root en el host:
+  # se monta solo acá, en solo lectura, y el puerto de Alloy no se publica.
+  alloy:
+    <<: *observability
+    image: grafana/alloy:v1.22.0
+    command: ["run", "/etc/alloy/config.alloy", "--storage.path=/var/lib/alloy/data"]
+    volumes:
+      - ./infrastructure/monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+    depends_on: [loki]
+
+  otel-collector:
+    <<: *observability
+    image: otel/opentelemetry-collector-contrib:0.165.0
+    volumes:
+      - ./infrastructure/monitoring/otel/otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on: [tempo]
+    read_only: true
+
+  tempo:
+    <<: *observability
+    image: grafana/tempo:2.10.10
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    volumes:
+      - ./infrastructure/monitoring/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo-data:/var/tempo
+    read_only: true
+
+  # La aplicación manda sus trazas al colector. Sin este archivo OTEL_EXPORTER_OTLP_ENDPOINT
+  # queda vacío y la app no genera trazas (los logs igual llevan el trace_id).
+  api:
+    environment: &otel
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_TRACES_SAMPLE_RATIO: ${OTEL_TRACES_SAMPLE_RATIO:-1.0}
+  worker:
+    environment: *otel
+  dispatcher:
+    environment: *otel
+  maintenance:
+    environment: *otel
+
+secrets:
+  alertmanager_smtp_password:
+    environment: ALERTMANAGER_SMTP_PASSWORD
+  alertmanager_guardia_webhook:
+    environment: ALERTMANAGER_GUARDIA_WEBHOOK_URL
+
+volumes:
+  prometheus-data:
+  alertmanager-data:
+  grafana-data:
+  loki-data:
+  alloy-data:
+  tempo-data:

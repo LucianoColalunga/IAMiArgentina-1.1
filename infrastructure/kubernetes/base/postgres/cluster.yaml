@@ -1,0 +1,97 @@
+# PostgreSQL 16 + pgvector con CloudNativePG: 1 primario + 2 réplicas, en nodos distintos.
+# Replicación sincrónica con 1 réplica confirmando cada commit (RPO 0 ante la caída de un nodo).
+# Si caen las dos réplicas, el primario deja de aceptar escrituras: se prioriza no perder datos.
+# Backups: WAL continuo + base diaria al object storage con el plugin Barman Cloud
+# (objectstore.yaml y scheduledbackup.yaml). archive_timeout fija el RPO ante la pérdida total
+# del cluster (objetivo <= 5 min).
+# Métricas: el PodMonitor se declara aparte (monitoring/podmonitors.yaml) para poder ponerle la
+# etiqueta que selecciona Prometheus; el que genera enablePodMonitor no la tiene y ese campo
+# está deprecado en las versiones recientes de CNPG.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: iamia-db
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: database
+spec:
+  instances: 3
+  # Fijar versión probada (y digest). La variante "standard" incluye pgvector.
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.10-standard-bookworm
+  primaryUpdateStrategy: unsupervised
+  primaryUpdateMethod: switchover
+  enableSuperuserAccess: false
+
+  # Las versiones nuevas de CNPG también aceptan .spec.postgresql.synchronous (method/number);
+  # no se pueden usar las dos formas a la vez.
+  minSyncReplicas: 1
+  maxSyncReplicas: 1
+
+  postgresql:
+    parameters:
+      # Con el pooler en modo sesión cada conexión de la app ocupa una acá (ver pooler.yaml).
+      max_connections: "500"
+      shared_buffers: 2GB
+      effective_cache_size: 6GB
+      work_mem: 8MB
+      # Los índices HNSW de pgvector se construyen mucho más rápido si entran en memoria.
+      maintenance_work_mem: 1GB
+      max_wal_size: 4GB
+      archive_timeout: 5min
+      log_min_duration_statement: "1000"
+      # Sin valores de parámetros en los logs (pueden ser datos de personas, aunque cifrados).
+      log_parameter_max_length: "0"
+      log_parameter_max_length_on_error: "0"
+      pg_stat_statements.max: "10000"
+      pg_stat_statements.track: top
+
+  bootstrap:
+    initdb:
+      database: iamia
+      owner: iamia
+      secret:
+        name: iamia-db-app-credentials
+      dataChecksums: true
+      # Corre una sola vez, como superusuario, en la base iamia. La app también ejecuta
+      # CREATE EXTENSION IF NOT EXISTS vector en su migración (acá no hace falta superusuario).
+      # Los timeouts se fijan por rol porque PgBouncer no reenvía los parámetros de arranque que
+      # manda la app (statement_timeout, idle_in_transaction_session_timeout). Migrate e ingest
+      # conectan directo y fijan los suyos al conectar, que pisan a estos.
+      # En un cluster ya creado, ejecutar estas sentencias a mano.
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS vector
+        - ALTER ROLE iamia SET statement_timeout = '5s'
+        - ALTER ROLE iamia SET idle_in_transaction_session_timeout = '30s'
+
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: iamia-db-backups
+
+  storage:
+    # Sin storageClass usa la default del cluster: conviene una de SSD/NVMe.
+    size: 100Gi
+  walStorage:
+    size: 20Gi
+
+  resources:
+    requests:
+      cpu: "2"
+      memory: 8Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+    topologyKey: kubernetes.io/hostname
+
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          cnpg.io/cluster: iamia-db

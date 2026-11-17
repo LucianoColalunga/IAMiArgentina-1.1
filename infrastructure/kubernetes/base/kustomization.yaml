@@ -1,0 +1,105 @@
+# Base de IAMiArgentina en Kubernetes: valores de producción. Los overlays solo cambian lo que
+# difiere por entorno. No se aplica sola (ver overlays/ y README.md).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: iamia
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: iamia
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: false
+    includeTemplates: true
+
+resources:
+  - namespace.yaml
+
+  # App
+  - app/serviceaccount.yaml
+  - app/externalsecret.yaml
+  - app/api-deployment.yaml
+  - app/api-service.yaml
+  - app/api-hpa.yaml
+  - app/worker-deployment.yaml
+  - app/dispatcher-whatsapp-deployment.yaml
+  - app/dispatcher-general-deployment.yaml
+  - app/maintenance-deployment.yaml
+  - app/keda-triggerauthentication.yaml
+  - app/keda-scaledobjects.yaml
+  - app/pdb.yaml
+  - app/migrate-job.yaml
+  - app/ingest-cronjob.yaml
+
+  # PostgreSQL (CloudNativePG + plugin Barman Cloud)
+  - postgres/externalsecrets.yaml
+  - postgres/cluster.yaml
+  - postgres/objectstore.yaml
+  - postgres/scheduledbackup.yaml
+  - postgres/pooler.yaml
+  - postgres/pdb-pooler.yaml
+
+  # RabbitMQ (Cluster Operator + Messaging Topology Operator)
+  - rabbitmq/externalsecret.yaml
+  - rabbitmq/rabbitmqcluster.yaml
+  - rabbitmq/topology.yaml
+  - rabbitmq/pdb.yaml
+
+  # Redis
+  - redis/externalsecret.yaml
+  - redis/serviceaccount.yaml
+  - redis/statefulset.yaml
+  - redis/service.yaml
+
+  # Modelos (vLLM). model-download-job.yaml se aplica a mano: no va acá.
+  - models/serviceaccount.yaml
+  - models/pvc.yaml
+  - models/llm-deployment.yaml
+  - models/embeddings-deployment.yaml
+  - models/services.yaml
+  - models/pdb.yaml
+
+  # Consola (oauth2-proxy)
+  - oauth2-proxy/externalsecret.yaml
+  - oauth2-proxy/serviceaccount.yaml
+  - oauth2-proxy/deployment.yaml
+  - oauth2-proxy/service.yaml
+  - oauth2-proxy/pdb.yaml
+
+  # Entrada
+  - ingress/certificates.yaml
+  - ingress/ingress-public.yaml
+  - ingress/ingress-ratelimited.yaml
+  - ingress/ingress-console.yaml
+
+  # Red
+  - networkpolicies/default-deny.yaml
+  - networkpolicies/dns.yaml
+  - networkpolicies/monitoring.yaml
+  - networkpolicies/api.yaml
+  - networkpolicies/worker.yaml
+  - networkpolicies/dispatcher.yaml
+  - networkpolicies/maintenance.yaml
+  - networkpolicies/jobs.yaml
+  - networkpolicies/postgres.yaml
+  - networkpolicies/rabbitmq.yaml
+  - networkpolicies/redis.yaml
+  - networkpolicies/models.yaml
+  - networkpolicies/oauth2-proxy.yaml
+
+  # Observabilidad (kube-prometheus-stack)
+  - monitoring/servicemonitors.yaml
+  - monitoring/podmonitors.yaml
+  - monitoring/prometheusrule.yaml
+
+configMapGenerator:
+  - name: iamia-config
+    envs:
+      - app/config.env
+    options:
+      labels:
+        app.kubernetes.io/name: iamia
+
+images:
+  - name: registry.example.org/iamia/backend
+    newTag: 1.1.0

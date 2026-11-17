@@ -1,0 +1,64 @@
+# Presupuestos de interrupción para drains y upgrades de nodos.
+# AlwaysAllow deja desalojar pods que ya están rotos (si no, un pod en CrashLoop traba el drain).
+# maintenance no tiene PDB: es una sola réplica y puede reiniciarse sin problema.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api
+  labels:
+    app.kubernetes.io/name: iamia
+    app.kubernetes.io/component: api
+spec:
+  maxUnavailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: iamia
+      app.kubernetes.io/component: api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: worker
+  labels:
+    app.kubernetes.io/name: iamia
+    app.kubernetes.io/component: worker
+spec:
+  maxUnavailable: 25%
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: iamia
+      app.kubernetes.io/component: worker
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: dispatcher-whatsapp
+  labels:
+    app.kubernetes.io/name: iamia
+    app.kubernetes.io/component: dispatcher
+spec:
+  maxUnavailable: 25%
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: iamia
+      app.kubernetes.io/component: dispatcher
+      iamia/channels: whatsapp
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: dispatcher-general
+  labels:
+    app.kubernetes.io/name: iamia
+    app.kubernetes.io/component: dispatcher
+spec:
+  maxUnavailable: 25%
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: iamia
+      app.kubernetes.io/component: dispatcher
+      iamia/channels: general

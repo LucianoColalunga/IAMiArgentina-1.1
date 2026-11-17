@@ -1,0 +1,83 @@
+# LLM: lo consultan worker y api (/v1/chat). Sin salida (modelo precargado, modo offline).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: llm
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vllm
+      app.kubernetes.io/component: llm
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values: ["iamia"]
+              - key: app.kubernetes.io/component
+                operator: In
+                values: ["api", "worker"]
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress: []
+---
+# Embeddings: worker (RAG), api (caché semántica) e ingest (indexado). Sin salida.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: embeddings
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vllm
+      app.kubernetes.io/component: embeddings
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values: ["iamia"]
+              - key: app.kubernetes.io/component
+                operator: In
+                values: ["api", "worker", "ingest"]
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress: []
+---
+# Job de precarga de modelos (model-download-job.yaml): descarga por HTTPS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: model-download
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vllm
+      app.kubernetes.io/component: model-download
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+              - 100.64.0.0/10
+      ports:
+        - protocol: TCP
+          port: 443

@@ -1,0 +1,38 @@
+# llm:8000 y embeddings:8000, los nombres que usa la app (LLM_BASE_URL, EMBEDDINGS_BASE_URL).
+# kube-proxy reparte conexiones, no pedidos: con pocos clientes el reparto entre réplicas puede
+# quedar desparejo. Si pasa, evaluar un router delante de vLLM.
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm
+  labels:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/component: llm
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/component: llm
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: embeddings
+  labels:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/component: embeddings
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/component: embeddings
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP

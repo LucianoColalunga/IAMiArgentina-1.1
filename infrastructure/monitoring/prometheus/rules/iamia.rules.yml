@@ -1,0 +1,280 @@
+# Reglas de Prometheus de IAMiArgentina: registros (recording rules) y alertas.
+# Las carga el Prometheus de docker compose (rule_files) y el mismo contenido va como
+# PrometheusRule en infrastructure/kubernetes/base/monitoring/prometheusrule.yaml:
+# si se toca una, actualizar la otra.
+# Jobs esperados: api, worker, dispatcher, maintenance, rabbitmq, rabbitmq-detailed.
+# Severidades: critical (guardia, atender ya) y warning (horario laboral).
+groups:
+  - name: iamia.registros
+    interval: 30s
+    rules:
+      - record: iamia:http_requests:rate5m
+        expr: |
+          sum(rate(iamia_http_requests_total{route!~"/metrics|/healthz|/readyz|/health/.*"}[5m]))
+      - record: iamia:http_requests_5xx:rate5m
+        expr: |
+          sum(rate(iamia_http_requests_total{status=~"5..",route!~"/metrics|/healthz|/readyz|/health/.*"}[5m]))
+          or vector(0)
+      - record: iamia:http_requests_5xx:ratio_rate5m
+        expr: |
+          iamia:http_requests_5xx:rate5m / iamia:http_requests:rate5m
+      - record: channel:iamia_messages_received:rate5m
+        expr: |
+          sum by (channel) (rate(iamia_messages_received_total[5m]))
+      - record: channel_outcome:iamia_messages_processed:rate5m
+        expr: |
+          sum by (channel, outcome) (rate(iamia_messages_processed_total[5m]))
+      - record: channel:iamia_end_to_end_seconds:p50_5m
+        expr: |
+          histogram_quantile(0.5, sum by (channel, le) (rate(iamia_end_to_end_seconds_bucket[5m])))
+      - record: channel:iamia_end_to_end_seconds:p95_5m
+        expr: |
+          histogram_quantile(0.95, sum by (channel, le) (rate(iamia_end_to_end_seconds_bucket[5m])))
+      - record: channel_result:iamia_deliveries:rate5m
+        expr: |
+          sum by (channel, result) (rate(iamia_deliveries_total[5m]))
+      # Intentos de envío fallidos sobre el total. "dead" no cuenta: es la marca final de un
+      # mensaje que ya sumó su falla; rate_limited tampoco (se reintenta solo).
+      - record: channel:iamia_deliveries_failed:ratio_rate15m
+        expr: |
+          sum by (channel) (rate(iamia_deliveries_total{result!~"sent|rate_limited|dead"}[15m]))
+          /
+          sum by (channel) (rate(iamia_deliveries_total{result!="dead"}[15m]))
+      # Las colas quorum las reporta el nodo líder; max evita contar dos veces si aparecen en
+      # más de un nodo.
+      - record: queue:iamia_rabbitmq_messages_ready:max
+        expr: |
+          max by (queue) (rabbitmq_detailed_queue_messages_ready{vhost="iamia"})
+      - record: queue:iamia_rabbitmq_messages:max
+        expr: |
+          max by (queue) (rabbitmq_detailed_queue_messages{vhost="iamia"})
+      - record: iamia:llm_seconds:p50_5m
+        expr: |
+          histogram_quantile(0.5, sum by (le) (rate(iamia_llm_seconds_bucket[5m])))
+      - record: iamia:llm_seconds:p95_5m
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(iamia_llm_seconds_bucket[5m])))
+      - record: layer:iamia_ai_cache_hits:ratio_rate5m
+        expr: |
+          sum by (layer) (rate(iamia_ai_cache_hits_total[5m]))
+          / ignoring (layer) group_left
+          sum(rate(iamia_ai_requests_total[5m]))
+      - record: kind:iamia_llm_tokens:rate5m
+        expr: |
+          sum by (kind) (rate(iamia_llm_tokens_total[5m]))
+
+  - name: iamia.api
+    rules:
+      - alert: IamiaApiErrorRate
+        expr: |
+          iamia:http_requests_5xx:ratio_rate5m > 0.02
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "La API responde con errores 5xx ({{ $value | humanizePercentage }})"
+          description: "Más del 2 % de los pedidos a la API terminan en 5xx en los últimos 5 minutos. Revisar los logs con role=api y la salud de PostgreSQL, Redis y RabbitMQ."
+          runbook_url: "https://github.com/LucianoColalunga/IAMiArgentina-1.1/blob/main/docs/manual/runbooks.md#api-errores-5xx"
+      - alert: IamiaApiErrorRate
+        expr: |
+          iamia:http_requests_5xx:ratio_rate5m > 0.10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "La API responde con muchos errores 5xx ({{ $value | humanizePercentage }})"
+          description: "Más del 10 % de los pedidos a la API terminan en 5xx: las plataformas van a reintentar o deshabilitar los webhooks. Revisar los logs con role=api y las dependencias."
+          runbook_url: "https://github.com/LucianoColalunga/IAMiArgentina-1.1/blob/main/docs/manual/runbooks.md#api-errores-5xx"
+      - alert: IamiaApiDown
+        expr: |
+          sum(up{job="api"}) == 0 or absent(up{job="api"})
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Ninguna instancia de la API responde"
+          description: "Prometheus no puede leer ninguna instancia de la API hace 2 minutos. No entran webhooks ni mensajes del chat web."
+          runbook_url: "https://github.com/LucianoColalunga/IAMiArgentina-1.1/blob/main/docs/manual/runbooks.md#api-caida"
+      - alert: IamiaTargetDown
+        expr: |
+          up{job=~"api|worker|dispatcher|maintenance|rabbitmq|rabbitmq-detailed"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No se pueden leer las métricas de {{ $labels.job }} ({{ $labels.instance }})"
+          description: "El target {{ $labels.instance }} del job {{ $labels.job }} no responde hace 5 minutos: el proceso está caído o reiniciándose, o la red no deja pasar a Prometheus."
+          runbook_url: "https://github.com/LucianoColalunga/IAMiArgentina-1.1/blob/main/docs/manual/runbooks.md#target-caido"
+
+  - name: iamia.mensajes
+    rules:
+      - alert: IamiaEndToEndLatencyHigh
+        expr: |
+          channel:iamia_end_to_end_seconds:p95_5m > 30
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Respuestas lentas en {{ $labels.channel }} (p95 {{ $value | humanizeDuration }})"
+          description: "El p95 entre que llega un mensaje y sale su respuesta supera los 30 s en {{ $labels.channel }}. Mirar la cola iamia.inbound, la latencia del LLM y el throttle del canal. También cuentan las respuestas de operadores a conversaciones derivadas."
+          runbook_url: "https://github.com/LucianoColalunga/IAMiArgentina-1.1/blob/main/docs/manual/runbooks.md#latencia-extremo-a-extremo"
+      - alert: IamiaNoMessagesProcessed
+        expr: |
+          sum(increase(iamia_messages_received_total[15m])) > 0
+          and
+          (sum(increase(iamia_messages_processed_total[15m])) or vector(0)) == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Entran mensajes pero no se procesa ninguno hace 15 minutos"
+          description: "La API sigue recibiendo mensajes y los workers no terminaron ninguno en 15 minutos. Revisar los pods worker, su conexión a RabbitMQ y el circuito del LLM."
+          runbook_url: "https://github.com/LucianoColalunga/IAMiArgentina-1.1/blob/main/docs/manual/runbooks.md#sin-procesamiento"
+
+  - name: iamia.colas
+    rules:
+      - alert: IamiaInboundBacklog
+        expr: |
+          queue:iamia_rabbitmq_messages_ready:max{queue="iamia.inbound"} > 1000
+          and
+          deriv(queue:iamia_rabbitmq_messages_ready:max{queue="iamia.inbound"}[15m]) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "La cola iamia.inbound crece ({{ $value | humanize }} mensajes en espera)"
+          description: "La cola de entrada lleva 15 minutos creciendo: entra más de lo que los workers procesan. Revisar el escalado de KEDA, la capacidad de vLLM y la latencia del LLM."
+          runbook_url: "https://github.com/LucianoColalunga/IAMiArgentina-1.1/blob/main/docs/manual/runbooks.md#cola-entrante"
+      - alert: IamiaInboundBacklog
+        expr: |
+          queue:iamia_rabbitmq_messages_ready:max{queue="iamia.inbound"} > 10000
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Más de 10.000 mensajes esperando en iamia.inbound ({{ $value | humanize }})"
+          description: "Las respuestas van a llegar con mucha demora y, si la cola llega a x-max-length, el broker rechaza publicaciones y el sweeper tiene que republicar desde PostgreSQL."
+          runbook_url: "https://github.com/LucianoColalunga/IAMiArgentina-1.1/blob/main/docs/manual/runbooks.md#cola-entrante"
+      - alert: IamiaDeadLetters
+        expr: |
+          sum by (queue) (increase(iamia_queue_dead_total[10m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Trabajos de {{ $labels.queue }} enviados a la cola de descarte"
+          description: "La app mandó {{ $value | humanize }} trabajos de {{ $labels.queue }} a la DLQ en 10 minutos (intentos agotados). Revisarlos en la consola (problemas) o en iamia.dead.*."
+          runbook_url: "https://github.com/LucianoColalunga/IAMiArgentina-1.1/blob/main/docs/manual/runbooks.md#cola-de-descarte"
+      - alert: IamiaDeadLetterQueueGrowing
+        expr: |
+          delta(queue:iamia_rabbitmq_messages:max{queue=~"iamia.dead.+"}[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Crece la cola de descarte {{ $labels.queue }}"
+          description: "RabbitMQ registra mensajes nuevos en {{ $labels.queue }}. Incluye los que superan x-delivery-limit o llegan inválidos, que la app no cuenta en iamia_queue_dead_total."
+          runbook_url: "https://github.com/LucianoColalunga/IAMiArgentina-1.1/blob/main/docs/manual/runbooks.md#cola-de-descarte"
+      - alert: IamiaSweeperRequeueSustained
+        expr: |
+          sum by (direction) (increase(iamia_sweeper_requeued_total[15m])) > 5
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "El sweeper reencola mensajes ({{ $labels.direction }}) hace más de 30 minutos"
+          description: "Hay mensajes guardados en PostgreSQL que no llegan a RabbitMQ y el sweeper los republica sin parar: falla la publicación (cola llena por x-max-length, alarma de memoria o disco del broker, conexión inestable)."
+          runbook_url: "https://github.com/LucianoColalunga/IAMiArgentina-1.1/blob/main/docs/manual/runbooks.md#sweeper-reencolando"
+      - alert: IamiaUndecryptableData
+        expr: |
+          sum by (table) (increase(iamia_key_rotation_rows_total{result="failed"}[1h])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Hay datos en {{ $labels.table }} que no se pueden descifrar"
+          description: "Al recifrar después de una rotación, el mantenimiento encontró datos cifrados con una clave que ya no está en DATA_ENCRYPTION_KEYS, o alterados. No retirar más claves hasta revisarlo."
+          runbook_url: "https://github.com/LucianoColalunga/IAMiArgentina-1.1/blob/main/docs/manual/runbooks.md#datos-sin-descifrar"
+
+  - name: iamia.canales
+    rules:
+      - alert: IamiaCircuitOpen
+        expr: |
+          max by (name) (max_over_time(iamia_circuit_state{name!="llm"}[1m])) == 2
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Circuito {{ $labels.name }} abierto hace más de 2 minutos"
+          description: "Las llamadas a {{ $labels.name }} están cortadas por el circuit breaker. Si es un canal, sus envíos se reprograman: revisar credenciales (errores auth) y el estado de la plataforma."
+          runbook_url: "https://github.com/LucianoColalunga/IAMiArgentina-1.1/blob/main/docs/manual/runbooks.md#circuito-abierto"
+      - alert: IamiaLLMCircuitOpen
+        expr: |
+          max(max_over_time(iamia_circuit_state{name="llm"}[1m])) == 2
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Circuito del LLM abierto hace más de 2 minutos"
+          description: "Los workers no pueden consultar al modelo. Revisar los pods llm (vLLM), sus GPU y su latencia. Los mensajes quedan en cola y se reintentan."
+          runbook_url: "https://github.com/LucianoColalunga/IAMiArgentina-1.1/blob/main/docs/manual/runbooks.md#circuito-llm-abierto"
+      - alert: IamiaWebhookRejections
+        expr: |
+          sum by (channel, reason) (rate(iamia_webhook_rejected_total[5m])) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pico de webhooks rechazados en {{ $labels.channel }} ({{ $labels.reason }})"
+          description: "Más de 12 webhooks por minuto rechazados por {{ $labels.reason }}. Con signature puede ser un intento de falsificar webhooks o un secreto de app rotado sin actualizar; con challenge, un verify token mal configurado."
+          runbook_url: "https://github.com/LucianoColalunga/IAMiArgentina-1.1/blob/main/docs/manual/runbooks.md#webhooks-rechazados"
+      - alert: IamiaDeliveryFailures
+        expr: |
+          channel:iamia_deliveries_failed:ratio_rate15m > 0.05
+          and on (channel)
+          sum by (channel) (rate(iamia_deliveries_total{result!="dead"}[15m])) > 0.01
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Fallan el {{ $value | humanizePercentage }} de los envíos por {{ $labels.channel }}"
+          description: "Más del 5 % de los intentos de envío por {{ $labels.channel }} fallan. Ver iamia_deliveries_total por result (auth, permanent, window_closed, retryable) y los logs delivery_failed."
+          runbook_url: "https://github.com/LucianoColalunga/IAMiArgentina-1.1/blob/main/docs/manual/runbooks.md#fallas-de-entrega"
+      - alert: IamiaDeliveryFailures
+        expr: |
+          channel:iamia_deliveries_failed:ratio_rate15m > 0.25
+          and on (channel)
+          sum by (channel) (rate(iamia_deliveries_total{result!="dead"}[15m])) > 0.01
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Fallan el {{ $value | humanizePercentage }} de los envíos por {{ $labels.channel }}"
+          description: "Una de cada cuatro respuestas por {{ $labels.channel }} no se entrega. Revisar credenciales del canal, el circuito channel:{{ $labels.channel }} y el estado de la plataforma."
+          runbook_url: "https://github.com/LucianoColalunga/IAMiArgentina-1.1/blob/main/docs/manual/runbooks.md#fallas-de-entrega"
+
+  - name: iamia.motor
+    rules:
+      - alert: IamiaAIBlockedSpike
+        expr: |
+          (
+            sum by (reason) (rate(iamia_ai_blocked_total[10m]))
+            / ignoring (reason) group_left
+            sum(rate(iamia_ai_requests_total[10m]))
+          ) > 0.10
+          and
+          sum by (reason) (rate(iamia_ai_blocked_total[10m])) > 0.02
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Muchas consultas bloqueadas por {{ $labels.reason }} ({{ $value | humanizePercentage }})"
+          description: "Más del 10 % de las consultas al motor se bloquean por {{ $labels.reason }}. prompt_injection: posible campaña de abuso; llm_busy o llm_circuit_open: falta capacidad de LLM; low_grounding u out_of_scope: revisar la base de conocimiento."
+          runbook_url: "https://github.com/LucianoColalunga/IAMiArgentina-1.1/blob/main/docs/manual/runbooks.md#bloqueos-del-motor"
+      - alert: IamiaLLMLatencyHigh
+        expr: |
+          iamia:llm_seconds:p95_5m > 20
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "El LLM tarda {{ $value | humanizeDuration }} en p95"
+          description: "El p95 de generación del LLM supera los 20 s. Revisar la carga de vLLM (cola, uso de KV cache), las GPU y si conviene sumar réplicas de llm."
+          runbook_url: "https://github.com/LucianoColalunga/IAMiArgentina-1.1/blob/main/docs/manual/runbooks.md#latencia-llm"

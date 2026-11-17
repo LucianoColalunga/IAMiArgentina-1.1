@@ -1,0 +1,36 @@
+# Tempo 2.x monolítico con almacenamiento local, para el stack de compose.
+# Montaje esperado: ./tempo/tempo.yml -> /etc/tempo/tempo.yml
+#   (comando: -config.file=/etc/tempo/tempo.yml; volumen persistente en /var/tempo)
+# Recibe OTLP del collector (otel/otel-collector.yml). Retención de trazas: 7 días.
+server:
+  http_listen_port: 3200
+  grpc_listen_port: 9095
+  log_level: warn
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        # Desde Tempo 2.7 los receivers escuchan en localhost si no se indica la dirección.
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+ingester:
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    block_retention: 168h
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+
+usage_report:
+  reporting_enabled: false

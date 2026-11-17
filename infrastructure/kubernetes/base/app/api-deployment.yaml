@@ -1,0 +1,123 @@
+# Gateway HTTP (FastAPI): webhooks de los canales, chat web, /v1/chat y API de la consola.
+# Sin estado. Las réplicas las maneja el HPA (api-hpa.yaml): por eso no se fija spec.replicas.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels:
+    app.kubernetes.io/name: iamia
+    app.kubernetes.io/component: api
+  annotations:
+    # Argo CD: después de las dependencias (ola 0) y de la migración (ola 1).
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: iamia
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: iamia
+        app.kubernetes.io/component: api
+    spec:
+      serviceAccountName: iamia
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      # uvicorn corta a los 20 s (timeout_graceful_shutdown) + 5 s de preStop: entra en 30.
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        # En clusters con zonas reales conviene pasar la de zona a DoNotSchedule.
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: iamia
+              app.kubernetes.io/component: api
+          matchLabelKeys:
+            - pod-template-hash
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: iamia
+              app.kubernetes.io/component: api
+          matchLabelKeys:
+            - pod-template-hash
+      containers:
+        - name: api
+          image: registry.example.org/iamia/backend:1.1.0
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "iamia"]
+          args: ["api", "--host", "0.0.0.0", "--port", "8000"]
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: iamia-config
+            - secretRef:
+                name: iamia-secrets
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            # Chequea PostgreSQL, Redis y RabbitMQ (ver "Riesgos conocidos" en el README).
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          lifecycle:
+            # Tiempo para que el ingress saque el pod de los endpoints antes del SIGTERM.
+            preStop:
+              sleep:
+                seconds: 5
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi

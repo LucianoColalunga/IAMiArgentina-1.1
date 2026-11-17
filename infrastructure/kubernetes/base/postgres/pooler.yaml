@@ -1,0 +1,61 @@
+# PgBouncer delante del primario (servicio iamia-db-pooler-rw).
+# Modo SESIÓN, no transacción: la app usa advisory locks de sesión (pg_advisory_lock en las
+# migraciones y en el refresco de tokens OAuth) y en modo transacción el lock quedaría en una
+# conexión del servidor que después usa otro cliente. Además asyncpg cachea prepared statements
+# por conexión. Al devolver la conexión, DISCARD ALL libera locks huérfanos.
+# En modo sesión el pooler no multiplexa: sirve para absorber picos de conexiones (los clientes
+# esperan en vez de chocar contra max_connections) y dar un único punto de entrada.
+# Dimensionamiento: instances x (default_pool_size + reserve_pool_size) < max_connections (500),
+# y la suma de réplicas máximas x DB_POOL_MAX_SIZE debería entrar en ese número.
+apiVersion: postgresql.cnpg.io/v1
+kind: Pooler
+metadata:
+  name: iamia-db-pooler-rw
+  labels:
+    app.kubernetes.io/name: pgbouncer
+    app.kubernetes.io/component: database-pooler
+spec:
+  cluster:
+    name: iamia-db
+  instances: 2
+  type: rw
+  pgbouncer:
+    poolMode: session
+    parameters:
+      max_client_conn: "1000"
+      default_pool_size: "200"
+      reserve_pool_size: "20"
+      # PgBouncer rechaza los parámetros de arranque que no conoce; estos se ignoran y quedan
+      # fijados por rol en la base (ver postInitApplicationSQL en cluster.yaml).
+      ignore_startup_parameters: extra_float_digits,options,statement_timeout,idle_in_transaction_session_timeout
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pgbouncer
+        app.kubernetes.io/component: database-pooler
+    spec:
+      containers:
+        - name: pgbouncer
+          resources:
+            requests:
+              cpu: 250m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 256Mi
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    cnpg.io/poolerName: iamia-db-pooler-rw
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              cnpg.io/poolerName: iamia-db-pooler-rw

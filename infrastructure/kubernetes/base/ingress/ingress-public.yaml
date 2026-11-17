@@ -1,0 +1,50 @@
+# Entrada pública de asistente.example.org: webhooks de las plataformas y archivos del chat web.
+# Solo se publican rutas explícitas: /metrics, /health*, /readyz y /admin/api nunca salen por acá.
+# Sin snippets. HSTS lo agrega el controlador (hsts=true en su ConfigMap, valor por defecto de
+# ingress-nginx) y además la API lo manda en producción.
+# Sin límite por IP en los webhooks: las plataformas mandan ráfagas desde pocas IPs y, si se
+# les rechaza, reintentan (o deshabilitan el webhook).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: iamia-public
+  labels:
+    app.kubernetes.io/name: iamia
+    app.kubernetes.io/component: api
+  annotations:
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Webhooks de WhatsApp de hasta 3 MB (la API corta en el mismo límite).
+    nginx.ingress.kubernetes.io/proxy-body-size: 3m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - asistente.example.org
+      secretName: asistente-tls
+  rules:
+    - host: asistente.example.org
+      http:
+        paths:
+          - path: /webhooks
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  name: http
+          - path: /chat
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  name: http
+          # La raíz redirige a /chat/.
+          - path: /
+            pathType: Exact
+            backend:
+              service:
+                name: api
+                port:
+                  name: http

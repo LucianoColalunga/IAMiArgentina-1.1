@@ -1,0 +1,115 @@
+# Staging: menos réplicas, recursos más chicos, APP_ENV=staging y hosts propios.
+#   kubectl kustomize infrastructure/kubernetes/overlays/staging
+# Se asume un cluster aparte (mismo namespace iamia, su propio ClusterSecretStore vault-backend
+# apuntando a los secretos de staging). Si compartiera cluster con producción, cambiar el
+# namespace acá y en las URLs con FQDN de los secretos.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+labels:
+  - pairs:
+      iamia/environment: staging
+    includeSelectors: false
+    includeTemplates: false
+
+images:
+  - name: registry.example.org/iamia/backend
+    newTag: 1.1.0
+
+configMapGenerator:
+  - name: iamia-config
+    behavior: merge
+    envs:
+      - config.env
+
+patches:
+  - path: patches/postgres.yaml
+  - path: patches/dependencies.yaml
+
+  - path: patches/app-resources.yaml
+    target:
+      kind: Deployment
+      labelSelector: app.kubernetes.io/name=iamia
+
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: api
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3
+
+  - target:
+      group: keda.sh
+      kind: ScaledObject
+    patch: |-
+      - op: replace
+        path: /spec/minReplicaCount
+        value: 1
+      - op: replace
+        path: /spec/maxReplicaCount
+        value: 3
+      - op: replace
+        path: /spec/fallback/replicas
+        value: 1
+
+  # Hosts de staging. Las plataformas exigen certificado válido para los webhooks: se usa el
+  # mismo tipo de ClusterIssuer que en producción (nombre de ejemplo).
+  - target:
+      group: cert-manager.io
+      kind: Certificate
+      name: asistente-tls
+    patch: |-
+      - op: replace
+        path: /spec/dnsNames/0
+        value: asistente.staging.example.org
+      - op: replace
+        path: /spec/issuerRef/name
+        value: letsencrypt-production
+  - target:
+      group: cert-manager.io
+      kind: Certificate
+      name: consola-tls
+    patch: |-
+      - op: replace
+        path: /spec/dnsNames/0
+        value: consola.staging.example.org
+      - op: replace
+        path: /spec/issuerRef/name
+        value: letsencrypt-production
+  - target:
+      kind: Ingress
+      name: iamia-public
+    patch: |-
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: asistente.staging.example.org
+      - op: replace
+        path: /spec/rules/0/host
+        value: asistente.staging.example.org
+  - target:
+      kind: Ingress
+      name: iamia-public-limited
+    patch: |-
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: asistente.staging.example.org
+      - op: replace
+        path: /spec/rules/0/host
+        value: asistente.staging.example.org
+  - target:
+      kind: Ingress
+      name: iamia-console
+    patch: |-
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: consola.staging.example.org
+      - op: replace
+        path: /spec/rules/0/host
+        value: consola.staging.example.org

@@ -1,0 +1,12 @@
+# Todo cerrado por defecto, entrada y salida. Cada componente abre lo suyo en su archivo
+# (las políticas se suman: una conexión pasa si la permiten la salida del origen y la entrada
+# del destino).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress

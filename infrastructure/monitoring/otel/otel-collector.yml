@@ -1,0 +1,63 @@
+# OpenTelemetry Collector (distribución contrib, la que trae el connector spanmetrics).
+# Montaje esperado: ./otel/otel-collector.yml -> /etc/otelcol-contrib/config.yaml
+#
+# Recibe trazas por OTLP y las manda a Tempo. Hoy la app no exporta trazas; sí pueden hacerlo
+# vLLM (--otlp-traces-endpoint=grpc://otel-collector:4317) y el proxy de borde. El trace_id de
+# los logs de la app ya tiene formato W3C (32 hex): si se instrumenta con OpenTelemetry, conviene
+# usarlo como trace id para que el enlace logs -> trazas de Grafana funcione directo.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  batch:
+    send_batch_size: 8192
+    timeout: 5s
+
+connectors:
+  # Métricas RED (llamadas, errores y duración por servicio y span) calculadas desde las trazas.
+  # Con la imagen "core" del collector (sin connectors): borrar este bloque, el exporter
+  # prometheus y el pipeline metrics/spanmetrics.
+  spanmetrics:
+    histogram:
+      explicit:
+        buckets: [5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s, 30s, 60s]
+    dimensions:
+      - name: http.response.status_code
+    metrics_flush_interval: 15s
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      # Red interna de compose. En Kubernetes, TLS o un NetworkPolicy que limite el tráfico.
+      insecure: true
+  # Lo scrapea Prometheus (job otel-collector, comentado en prometheus/prometheus.yml).
+  prometheus:
+    endpoint: 0.0.0.0:8889
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  telemetry:
+    logs:
+      level: warn
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/tempo, spanmetrics]
+    metrics/spanmetrics:
+      receivers: [spanmetrics]
+      exporters: [prometheus]

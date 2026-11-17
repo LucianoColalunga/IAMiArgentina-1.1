@@ -1,0 +1,28 @@
+# Destino de backups del plugin Barman Cloud (object storage compatible con S3).
+# Bucket y endpoint son placeholders. Conviene un bucket con versionado/bloqueo de objetos y en
+# otro sitio que el cluster (si se pierde el datacenter, los backups tienen que sobrevivir).
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: iamia-db-backups
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: database
+spec:
+  retentionPolicy: 30d
+  configuration:
+    destinationPath: s3://CHANGE_ME/iamia-db/
+    endpointURL: https://objectstore.example.org
+    s3Credentials:
+      accessKeyId:
+        name: iamia-db-backup-s3
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: iamia-db-backup-s3
+        key: ACCESS_SECRET_KEY
+    wal:
+      compression: gzip
+      maxParallel: 4
+    data:
+      compression: gzip
+      jobs: 2

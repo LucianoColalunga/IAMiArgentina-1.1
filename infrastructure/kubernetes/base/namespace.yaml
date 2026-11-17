@@ -1,0 +1,11 @@
+# Namespace de la plataforma.
+# Pod Security: "baseline" obligatorio y "restricted" en aviso/auditoría. Los pods propios cumplen
+# restricted; los que generan algunos operadores (RabbitMQ) pueden no cumplirlo según la versión.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: iamia
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted

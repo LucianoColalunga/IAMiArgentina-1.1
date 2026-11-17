@@ -1,0 +1,103 @@
+# Redis solo para cachés, deduplicación y throttles. Es reconstruible: la app sigue andando si
+# Redis no está (fail open) y la idempotencia la garantizan los índices únicos de PostgreSQL.
+# Por eso una sola instancia, sin AOF ni RDB y sin disco persistente.
+# Para alta disponibilidad: Redis Sentinel (3 sentinels + réplica) o Valkey con el operador que
+# se use en el cluster; la app solo necesita cambiar REDIS_URL. No tiene sentido un Redis
+# Cluster para este volumen.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+      app.kubernetes.io/component: cache
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/component: cache
+    spec:
+      serviceAccountName: redis
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 10
+      securityContext:
+        runAsNonRoot: true
+        # Usuario redis de la imagen alpine.
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          image: redis:8.6-alpine
+          imagePullPolicy: IfNotPresent
+          args:
+            - --requirepass
+            - $(REDIS_PASSWORD)
+            - --maxmemory
+            - $(REDIS_MAXMEMORY)
+            - --maxmemory-policy
+            - allkeys-lru
+            - --appendonly
+            - "no"
+            - --save
+            - ""
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: iamia-redis
+                  key: REDIS_PASSWORD
+            # redis-cli la toma sola para el chequeo de readiness.
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: iamia-redis
+                  key: REDIS_PASSWORD
+            # Un poco menos que el límite de memoria del contenedor (fragmentación, buffers).
+            - name: REDIS_MAXMEMORY
+              value: 1gb
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "redis-cli ping | grep -q PONG"]
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1536Mi
+            limits:
+              cpu: "1"
+              memory: 1536Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir:
+            sizeLimit: 256Mi

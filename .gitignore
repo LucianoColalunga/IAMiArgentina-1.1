@@ -1,0 +1,30 @@
+# Entornos y secretos
+.env
+.env.*
+!.env.example
+!.env.observability.example
+.dev-keys/
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Resultados locales de pruebas (los informes que se publican van en docs/reports)
+tests/**/results/
+*.log
+!docs/reports/datos/*.log
+
+# Editor y sistema
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

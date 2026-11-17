@@ -1,0 +1,49 @@
+# Infraestructura efímera para las pruebas de integración (datos en tmpfs, puertos solo en localhost).
+#
+#   docker compose -f backend/tests/integration/docker-compose.yml up -d --wait
+#   RUN_INTEGRATION=1 python -m pytest backend/tests/integration
+#   docker compose -f backend/tests/integration/docker-compose.yml down -v
+
+name: iamia-test
+
+services:
+  postgres:
+    image: iamia/postgres:16-pgvector
+    environment:
+      POSTGRES_DB: iamia
+      POSTGRES_USER: iamia
+      POSTGRES_PASSWORD: iamia-test
+    command: ["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off"]
+    # La imagen corre como el usuario postgres (uid 70): el tmpfs tiene que ser suyo.
+    tmpfs: ["/var/lib/postgresql/data:uid=70,gid=70,mode=0700"]
+    ports: ["127.0.0.1:55432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iamia -d iamia"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:8.6-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports: ["127.0.0.1:56379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  rabbitmq:
+    image: rabbitmq:4.3-management-alpine
+    hostname: rabbitmq-test
+    environment:
+      RABBITMQ_DEFAULT_USER: iamia
+      RABBITMQ_DEFAULT_PASS: iamia-test
+      RABBITMQ_DEFAULT_VHOST: iamia
+    tmpfs: [/var/lib/rabbitmq]
+    ports: ["127.0.0.1:55672:5672"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 10s
+      retries: 30

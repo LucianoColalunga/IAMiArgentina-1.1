@@ -1,0 +1,54 @@
+[project]
+name = "iamia"
+version = "1.1.0"
+description = "Plataforma de IA local multicanal para atención automatizada y recuperación de información"
+readme = "../README.md"
+requires-python = ">=3.12"
+authors = [{ name = "Luciano Colalunga" }]
+license = { text = "Uso privado" }
+# Las versiones exactas están fijadas en requirements.txt (lo que usa la imagen Docker).
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+    "pydantic-settings",
+    "httpx",
+    "prometheus-client",
+    "redis[hiredis]",
+    "asyncpg",
+    "aio-pika",
+    "tiktoken",
+    "beautifulsoup4",
+    "lxml",
+    "PyJWT[crypto]",
+    "cryptography",
+]
+
+[project.scripts]
+iamia = "iamia.__main__:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -ra"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "integration: requiere PostgreSQL, Redis y RabbitMQ reales (RUN_INTEGRATION=1)",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:aiormq.*",
+    "ignore::DeprecationWarning:pamqp.*",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "ASYNC", "RUF"]
+ignore = ["S101", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S311"]
+# El texto de los prompts se mantiene en una línea por regla para poder revisarlo y versionarlo.
+"iamia/ai/prompts.py" = ["E501"]

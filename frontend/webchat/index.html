@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Chat para consultar trámites y servicios públicos con información de sitios oficiales. Proyecto independiente, no oficial.">
+  <title>Asistente de trámites</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="webchat.css">
+  <script type="module" src="webchat.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#message-input">Ir a escribir un mensaje</a>
+
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar__row">
+        <div class="brand">
+          <svg class="brand__logo" viewBox="0 0 32 32" width="36" height="36" aria-hidden="true" focusable="false">
+            <rect class="brand__logo-bg" width="32" height="32" rx="9"/>
+            <path class="brand__logo-mark" d="M11 8h10a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4h-6l-4.5 3.5V22H11a4 4 0 0 1-4-4v-6a4 4 0 0 1 4-4z"/>
+          </svg>
+          <div class="brand__text">
+            <h1 class="brand__name">Asistente de trámites</h1>
+            <p class="brand__tagline">Consultas sobre trámites y servicios públicos</p>
+          </div>
+        </div>
+        <button type="button" class="btn btn--ghost" id="new-chat" aria-label="Nueva conversación">
+          <svg class="icon" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+            <path d="M10 4v12M4 10h12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <span>Nueva<span class="wide-only"> conversación</span></span>
+        </button>
+      </div>
+      <p class="notice">
+        <strong>Proyecto independiente, no oficial.</strong>
+        Las respuestas se basan en información pública; verificá siempre en los sitios oficiales.
+        No escribas datos personales sensibles (DNI, contraseñas, datos bancarios).
+      </p>
+    </header>
+
+    <main class="chat" id="chat" tabindex="0" aria-label="Conversación">
+      <section class="welcome" id="welcome" aria-labelledby="welcome-title">
+        <h2 class="welcome__title" id="welcome-title">¡Hola! ¿Qué trámite querés consultar?</h2>
+        <p class="welcome__text">Escribí tu consulta en una oración. Las respuestas salen de información publicada en sitios oficiales e incluyen las fuentes para que puedas verificarlas.</p>
+        <p class="welcome__label" id="suggestions-label">Probá con alguna de estas:</p>
+        <ul class="suggestions" aria-labelledby="suggestions-label">
+          <li><button type="button" class="suggestion" data-suggestion>¿Cómo saco el DNI digital?</button></li>
+          <li><button type="button" class="suggestion" data-suggestion>¿Cómo valido mi identidad para hacer trámites en línea?</button></li>
+          <li><button type="button" class="suggestion" data-suggestion>¿Cómo tengo la cédula del vehículo en el celular?</button></li>
+        </ul>
+      </section>
+
+      <div class="messages" id="messages" role="log" aria-live="polite" aria-relevant="additions" aria-label="Mensajes"></div>
+      <p class="typing" id="typing" role="status" aria-live="polite"></p>
+    </main>
+
+    <form class="composer" id="composer" aria-label="Escribir un mensaje" novalidate>
+      <div class="composer__row">
+        <label class="visually-hidden" for="message-input">Tu mensaje</label>
+        <textarea class="composer__input" id="message-input" name="text" rows="1" maxlength="1000"
+                  placeholder="Escribí tu consulta…" enterkeyhint="send" autocomplete="off"
+                  aria-describedby="composer-hint char-count"></textarea>
+        <button type="submit" class="btn btn--primary composer__send" id="send" disabled>
+          <svg class="icon" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+            <path d="M4 10h11M11 5l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span id="send-label">Enviar</span>
+        </button>
+      </div>
+      <div class="composer__info">
+        <p class="composer__hint" id="composer-hint">Escribí <kbd>AYUDA</kbd> para ver opciones o <kbd>HUMANO</kbd> para hablar con una persona.</p>
+        <p class="composer__count" id="char-count">0/1000</p>
+      </div>
+      <p class="composer__status" id="composer-status" role="status"></p>
+      <p class="visually-hidden" id="sr-status" role="status"></p>
+    </form>
+  </div>
+
+  <dialog class="dialog" id="new-chat-dialog" aria-labelledby="new-chat-title" aria-describedby="new-chat-text">
+    <h2 class="dialog__title" id="new-chat-title">¿Empezar una conversación nueva?</h2>
+    <p class="dialog__text" id="new-chat-text">Se borra lo que ves en pantalla y tu próxima consulta empieza de cero.</p>
+    <div class="dialog__actions">
+      <button type="button" class="btn btn--ghost" id="new-chat-cancel" autofocus>Cancelar</button>
+      <button type="button" class="btn btn--primary" id="new-chat-confirm">Empezar de nuevo</button>
+    </div>
+  </dialog>
+</body>
+</html>

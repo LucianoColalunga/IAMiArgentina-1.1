@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Consola de operadores · Asistente de trámites</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="console.css">
+  <script type="module" src="console.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Ir al contenido</a>
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand__logo" viewBox="0 0 32 32" width="32" height="32" aria-hidden="true" focusable="false">
+        <rect class="brand__logo-bg" width="32" height="32" rx="9"/>
+        <path class="brand__logo-mark" d="M11 8h10a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4h-6l-4.5 3.5V22H11a4 4 0 0 1-4-4v-6a4 4 0 0 1 4-4z"/>
+      </svg>
+      <p class="brand__text">
+        <span class="brand__name">Asistente de trámites</span>
+        <span class="brand__sub">Consola de operadores</span>
+      </p>
+    </div>
+    <div class="who" id="who" hidden>
+      <p class="who__info">
+        <span class="visually-hidden">Sesión iniciada como</span>
+        <span class="who__name" id="who-name"></span>
+        <span class="who__roles" id="who-roles"></span>
+      </p>
+      <button type="button" class="btn btn--ghost btn--small" id="logout">Salir</button>
+    </div>
+  </header>
+
+  <main class="main" id="main" tabindex="-1">
+    <p class="boot" id="view-boot">Cargando la consola…</p>
+
+    <section class="card" id="view-login" hidden aria-labelledby="login-title">
+      <h1 class="card__title" id="login-title">Ingresar a la consola</h1>
+      <p class="card__notice" id="login-notice" role="status"></p>
+      <p>No encontramos una sesión activa. Pegá un token de acceso para continuar.</p>
+      <form class="login" id="login-form" novalidate>
+        <label class="field__label" for="token-input">Token de acceso</label>
+        <input class="field__input" id="token-input" type="password" autocomplete="off" spellcheck="false"
+               autocapitalize="off" aria-describedby="token-help login-error">
+        <p class="field__help" id="token-help">En desarrollo podés generar uno con <code>python -m iamia dev-token --role operator</code>. Se guarda solo en esta pestaña y se borra al cerrarla.</p>
+        <p class="field__error" id="login-error" role="alert"></p>
+        <button type="submit" class="btn btn--primary" id="login-submit">Ingresar</button>
+      </form>
+    </section>
+
+    <section class="card" id="view-error" hidden aria-labelledby="error-title">
+      <h1 class="card__title" id="error-title">No se pudo abrir la consola</h1>
+      <p id="error-text"></p>
+      <button type="button" class="btn btn--primary" id="error-retry">Reintentar</button>
+    </section>
+
+    <section class="card" id="view-denied" hidden aria-labelledby="denied-title">
+      <h1 class="card__title" id="denied-title">Sin acceso</h1>
+      <p>Tu usuario no tiene permisos para usar la consola. Pedile acceso a quien administra el servicio.</p>
+    </section>
+
+    <div class="workspace" id="view-app" hidden>
+      <h1 class="visually-hidden">Consola de operadores</h1>
+      <div class="tabs" id="tablist" role="tablist" aria-label="Secciones de la consola">
+        <button type="button" class="tab" id="tab-conversations" role="tab" data-tab="conversations"
+                aria-controls="panel-conversations" aria-selected="true">Conversaciones<span class="tab__badge" id="waiting-badge" hidden></span></button>
+        <button type="button" class="tab" id="tab-problems" role="tab" data-tab="problems"
+                aria-controls="panel-problems" aria-selected="false" tabindex="-1">Problemas de envío</button>
+        <button type="button" class="tab" id="tab-channels" role="tab" data-tab="channels"
+                aria-controls="panel-channels" aria-selected="false" tabindex="-1">Canales</button>
+        <button type="button" class="tab" id="tab-audit" role="tab" data-tab="audit"
+                aria-controls="panel-audit" aria-selected="false" tabindex="-1">Auditoría</button>
+      </div>
+
+      <section class="panel panel--split" id="panel-conversations" role="tabpanel" aria-labelledby="tab-conversations">
+        <div class="split" id="split">
+          <div class="pane pane--list">
+            <div class="pane__head">
+              <h2 class="pane__title" id="list-title" tabindex="-1">Conversaciones</h2>
+              <p class="pane__meta" id="list-updated"></p>
+            </div>
+            <div class="filters" id="filters" role="group" aria-label="Filtrar por estado">
+              <button type="button" class="chip" data-state="waiting_human" aria-pressed="true">Esperando persona</button>
+              <button type="button" class="chip" data-state="human" aria-pressed="true">Con operador/a</button>
+              <button type="button" class="chip" data-state="bot" aria-pressed="false">Asistente</button>
+              <button type="button" class="chip" data-state="closed" aria-pressed="false">Cerradas</button>
+            </div>
+            <p class="empty" id="list-empty" hidden>No hay conversaciones con estos filtros.</p>
+            <ul class="conv-list" id="conv-list" aria-labelledby="list-title"></ul>
+          </div>
+
+          <div class="pane pane--detail">
+            <p class="empty empty--detail" id="detail-empty">Elegí una conversación de la lista para ver los mensajes.</p>
+            <article class="detail" id="detail" hidden aria-labelledby="detail-title">
+              <header class="detail__head">
+                <button type="button" class="btn btn--ghost btn--small detail__back" id="detail-back">Volver a la lista</button>
+                <h3 class="detail__title" id="detail-title" tabindex="-1"></h3>
+                <dl class="facts" id="detail-facts"></dl>
+              </header>
+              <div class="detail__actions" id="detail-actions" role="group" aria-label="Acciones sobre la conversación" hidden>
+                <button type="button" class="btn btn--primary" id="act-claim" hidden>Tomar conversación</button>
+                <button type="button" class="btn" id="act-release" hidden>Devolver al asistente</button>
+                <button type="button" class="btn" id="act-close" hidden>Cerrar</button>
+                <button type="button" class="btn btn--danger" id="act-erase" hidden>Borrar datos del contacto</button>
+              </div>
+              <ol class="transcript" id="transcript" tabindex="0" aria-label="Mensajes de la conversación"></ol>
+              <form class="reply" id="reply-form" novalidate hidden>
+                <label class="field__label" for="reply-text">Tu respuesta</label>
+                <textarea class="field__input reply__input" id="reply-text" rows="3" maxlength="4000"
+                          aria-describedby="reply-hint"></textarea>
+                <div class="reply__foot">
+                  <p class="reply__hint" id="reply-hint"></p>
+                  <span class="counter" id="reply-count">0/4000</span>
+                  <button type="submit" class="btn btn--primary" id="reply-send" disabled>Enviar respuesta</button>
+                </div>
+              </form>
+              <p class="visually-hidden" id="detail-status" role="status"></p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-problems" role="tabpanel" aria-labelledby="tab-problems" hidden>
+        <div class="panel__head">
+          <h2 class="panel__title" id="problems-title" tabindex="-1">Problemas de envío</h2>
+          <button type="button" class="btn btn--small" id="problems-refresh">Actualizar</button>
+        </div>
+        <p class="panel__intro">Mensajes salientes que fallaron o agotaron los reintentos.</p>
+        <p class="empty" id="problems-empty" hidden>No hay envíos con problemas.</p>
+        <div class="table-wrap" id="problems-wrap" hidden>
+          <table class="table">
+            <caption class="visually-hidden">Mensajes con problemas de envío</caption>
+            <thead>
+              <tr>
+                <th scope="col">Actualizado</th>
+                <th scope="col">Canal</th>
+                <th scope="col">Autor</th>
+                <th scope="col">Estado</th>
+                <th scope="col" class="num">Intentos</th>
+                <th scope="col">Error</th>
+                <th scope="col"><span class="visually-hidden">Acciones</span></th>
+              </tr>
+            </thead>
+            <tbody id="problems-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-channels" role="tabpanel" aria-labelledby="tab-channels" hidden>
+        <div class="panel__head">
+          <h2 class="panel__title">Canales</h2>
+          <p class="panel__meta" id="channels-updated"></p>
+          <button type="button" class="btn btn--small" id="channels-refresh">Actualizar</button>
+        </div>
+        <div class="blocks">
+          <section class="block" aria-labelledby="channel-list-title">
+            <h3 class="block__title" id="channel-list-title">Estado de los canales</h3>
+            <ul class="channel-list" id="channel-list"></ul>
+          </section>
+          <section class="block" aria-labelledby="queues-title">
+            <h3 class="block__title" id="queues-title">Colas</h3>
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Cola</th>
+                    <th scope="col" class="num">Mensajes en espera</th>
+                  </tr>
+                </thead>
+                <tbody id="queues-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+        <section class="block" aria-labelledby="summary-title">
+          <h3 class="block__title" id="summary-title">Últimas 24 horas</h3>
+          <p class="empty" id="summary-empty" hidden>No hubo mensajes en las últimas 24 horas.</p>
+          <div class="table-wrap" id="summary-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th scope="col">Canal</th>
+                  <th scope="col" class="num">Entrantes</th>
+                  <th scope="col" class="num">Salientes</th>
+                  <th scope="col" class="num">Con error</th>
+                  <th scope="col">Detalle por estado</th>
+                </tr>
+              </thead>
+              <tbody id="summary-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section class="panel" id="panel-audit" role="tabpanel" aria-labelledby="tab-audit" hidden>
+        <div class="panel__head">
+          <h2 class="panel__title" id="audit-title" tabindex="-1">Auditoría</h2>
+          <p class="panel__meta" id="audit-count"></p>
+          <button type="button" class="btn btn--small" id="audit-refresh">Actualizar</button>
+        </div>
+        <p class="empty" id="audit-empty" hidden>Todavía no hay registros de auditoría.</p>
+        <div class="table-wrap" id="audit-wrap" hidden>
+          <table class="table">
+            <caption class="visually-hidden">Registro de auditoría, del más reciente al más antiguo</caption>
+            <thead>
+              <tr>
+                <th scope="col">Fecha</th>
+                <th scope="col">Quién</th>
+                <th scope="col">Acción</th>
+                <th scope="col">Sobre</th>
+                <th scope="col">Detalle</th>
+              </tr>
+            </thead>
+            <tbody id="audit-body"></tbody>
+          </table>
+        </div>
+        <button type="button" class="btn load-more" id="audit-more" hidden>Cargar más</button>
+      </section>
+    </div>
+  </main>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <dialog class="dialog" id="erase-dialog" aria-labelledby="erase-title" aria-describedby="erase-text">
+    <h2 class="dialog__title" id="erase-title">¿Borrar los datos del contacto?</h2>
+    <p class="dialog__text" id="erase-text">Se van a borrar de forma permanente el contacto <strong id="erase-contact"></strong>, todas sus conversaciones y sus mensajes. Esta acción no se puede deshacer.</p>
+    <div class="dialog__actions">
+      <button type="button" class="btn" id="erase-cancel" autofocus>Cancelar</button>
+      <button type="button" class="btn btn--danger" id="erase-confirm">Borrar definitivamente</button>
+    </div>
+  </dialog>
+</body>
+</html>

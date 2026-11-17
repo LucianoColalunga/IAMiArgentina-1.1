@@ -1,0 +1,88 @@
+# vLLM en GPU NVIDIA (configuración de referencia para el servidor de inferencia).
+#
+#   docker compose -f docker-compose.yml -f compose.gpu.yml --profile models up -d --build
+#
+# Requiere NVIDIA Container Toolkit. La imagen de vLLM queda fijada (v0.33.0, noviembre de 2026,
+# por digest) pero no se probó en este equipo, que no tiene GPU: validarla en el servidor antes de
+# producción y cambiarla con VLLM_IMAGE. En Kubernetes ver infrastructure/kubernetes.
+
+x-vllm: &vllm
+  image: ${VLLM_IMAGE:-vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e}
+  ipc: host
+  environment:
+    HF_TOKEN: ${HF_TOKEN:-}
+    VLLM_API_KEY: ${LOCAL_MODELS_API_KEY:-clave-local-de-prueba}
+  volumes:
+    - hf-cache:/root/.cache/huggingface
+  healthcheck:
+    test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+    interval: 15s
+    timeout: 5s
+    retries: 10
+    start_period: 900s
+  restart: unless-stopped
+
+x-gpu-env: &gpu-env
+  LLM_BASE_URL: http://llm:8000/v1
+  LLM_MODEL: ${VLLM_MODEL:-Qwen/Qwen3-30B-A3B-Instruct-2507-FP8}
+  LLM_API_KEY: ${LOCAL_MODELS_API_KEY:-clave-local-de-prueba}
+  EMBEDDINGS_BASE_URL: http://embeddings:8000/v1
+  EMBEDDINGS_MODEL: BAAI/bge-m3
+  EMBEDDINGS_API_KEY: ${LOCAL_MODELS_API_KEY:-clave-local-de-prueba}
+  EMBEDDING_DIMENSIONS: "1024"
+
+services:
+  llm:
+    <<: *vllm
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${LLM_GPU_IDS:-0}"]
+              capabilities: [gpu]
+    command:
+      - ${VLLM_MODEL:-Qwen/Qwen3-30B-A3B-Instruct-2507-FP8}
+      - --served-model-name
+      - ${VLLM_MODEL:-Qwen/Qwen3-30B-A3B-Instruct-2507-FP8}
+      - --max-model-len
+      - "8192"
+      - --gpu-memory-utilization
+      - "0.90"
+      - --max-num-seqs
+      - "${VLLM_MAX_NUM_SEQS:-128}"
+      # El system prompt es idéntico en todas las consultas: su KV-cache se reutiliza.
+      - --enable-prefix-caching
+
+  embeddings:
+    <<: *vllm
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${EMBEDDINGS_GPU_IDS:-1}"]
+              capabilities: [gpu]
+    # Verificar el nombre del flag de pooling/embeddings para la versión fijada de vLLM.
+    command: ["BAAI/bge-m3", "--served-model-name", "BAAI/bge-m3", "--task", "embed", "--gpu-memory-utilization", "0.5"]
+
+  ingest:
+    environment:
+      <<: *gpu-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      embeddings:
+        condition: service_healthy
+  api:
+    environment:
+      <<: *gpu-env
+  worker:
+    environment:
+      <<: *gpu-env
+  maintenance:
+    environment:
+      <<: *gpu-env
+
+volumes:
+  hf-cache:

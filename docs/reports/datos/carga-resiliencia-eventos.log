@@ -1,0 +1,12 @@
+12:03:30 reinicio de worker
+12:03:31 worker de nuevo arriba
+12:03:55 reinicio de dispatcher
+12:03:56 dispatcher de nuevo arriba
+12:04:20 reinicio de rabbitmq
+12:04:22 rabbitmq de nuevo arriba
+12:04:45 reinicio de redis
+12:04:46 redis de nuevo arriba
+12:05:10 reinicio de postgres
+12:05:13 postgres de nuevo arriba
+12:05:25 se recrea api
+12:05:33 api recreado y sano

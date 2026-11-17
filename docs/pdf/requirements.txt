@@ -1,0 +1,2 @@
+# Dependencias para generar la documentación en PDF (python docs/pdf/generar.py).
+reportlab==5.1.0

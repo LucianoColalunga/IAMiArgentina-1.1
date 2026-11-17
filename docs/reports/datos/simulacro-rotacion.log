@@ -1,0 +1,42 @@
+== 0. entorno limpio y e2e con las imágenes finales
+e2e exit=0
+======================== 41 passed in 72.88s (0:01:12) =========================
+clave anterior: k1  clave nueva: k20261117  (valores sin mostrar)
+== 1. antes de rotar
+clave activa: k1
+oauth_tokens  sin datos  (recifrado al día desde 2026-11-17 01:22 UTC)
+contacts      k1: 29  (recifrado al día desde 2026-11-17 01:22 UTC)
+messages      k1: 65  (recifrado al día desde 2026-11-17 01:22 UTC)
+todo usa la clave activa: las anteriores se pueden retirar de DATA_ENCRYPTION_KEYS.
+key-usage exit=0
+== 2. rotación: la nueva primero, la anterior detrás
+up exit=0
+key_rotation_started {'table': 'oauth_tokens', 'key_id': 'k20261117'}
+key_rotation_table_done {'table': 'oauth_tokens', 'key_id': 'k20261117', 'undecryptable': 0}
+key_rotation_started {'table': 'contacts', 'key_id': 'k20261117'}
+key_rotation_table_done {'table': 'contacts', 'key_id': 'k20261117', 'undecryptable': 0}
+key_rotation_started {'table': 'messages', 'key_id': 'k20261117'}
+key_rotation_table_done {'table': 'messages', 'key_id': 'k20261117', 'undecryptable': 0}
+key_rotation_progress {'rotated': 94, 'failed': 0}
+key_rotation_done {'key_id': 'k20261117'}
+clave activa: k20261117
+oauth_tokens  sin datos  (recifrado al día desde 2026-11-17 01:23 UTC)
+contacts      k20261117: 29  (recifrado al día desde 2026-11-17 01:23 UTC)
+messages      k20261117: 65  (recifrado al día desde 2026-11-17 01:23 UTC)
+todo usa la clave activa: las anteriores se pueden retirar de DATA_ENCRYPTION_KEYS.
+key-usage exit=0
+== 3. se retira la clave anterior
+up exit=0
+clave activa: k20261117
+oauth_tokens  sin datos  (recifrado al día desde 2026-11-17 01:23 UTC)
+contacts      k20261117: 29  (recifrado al día desde 2026-11-17 01:23 UTC)
+messages      k20261117: 65  (recifrado al día desde 2026-11-17 01:23 UTC)
+todo usa la clave activa: las anteriores se pueden retirar de DATA_ENCRYPTION_KEYS.
+key-usage exit=0
+== 4. e2e completo otra vez, solo con la clave nueva y los datos de la primera corrida
+e2e exit=0
+====================== 39 passed, 2 deselected in 42.43s =======================
+errores de descifrado en el worker: 0
+errores de descifrado en el dispatcher: 0
+== 5. apagado
+down exit=0

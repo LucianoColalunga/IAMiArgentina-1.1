@@ -1,0 +1,104 @@
+{
+  "label": "sostenida",
+  "started_at": 1794838831.681012,
+  "steps": [
+    {
+      "target_rate_per_s": 20.0,
+      "seconds": 120.0,
+      "sent": 2400,
+      "by_channel": {
+        "whatsapp": 1320,
+        "telegram": 600,
+        "messenger": 240,
+        "instagram": 240
+      },
+      "accepted": 2400,
+      "retried_webhooks": 0,
+      "rejected_after_retries": 0,
+      "answered": 2400,
+      "unanswered": 0,
+      "duplicated": 0,
+      "webhook_ack_ms": {
+        "p50": 11.5,
+        "p95": 21.1,
+        "p99": 36.9,
+        "max": 161.4
+      },
+      "reply_ms": {
+        "p50": 31.9,
+        "p95": 51.8,
+        "p99": 77.6,
+        "max": 272.6
+      },
+      "reply_ms_by_kind": {
+        "unica": {
+          "p50": 35.8,
+          "p95": 55.5,
+          "p99": 76.8,
+          "max": 272.6
+        },
+        "repetida": {
+          "p50": 25.4,
+          "p95": 43.4,
+          "p99": 74.2,
+          "max": 218.9
+        },
+        "otro_tema": {
+          "p50": 25.7,
+          "p95": 45.7,
+          "p99": 80.3,
+          "max": 111.3
+        }
+      }
+    }
+  ],
+  "total": {
+    "target_rate_per_s": null,
+    "seconds": 120.0,
+    "sent": 2400,
+    "by_channel": {
+      "whatsapp": 1320,
+      "telegram": 600,
+      "messenger": 240,
+      "instagram": 240
+    },
+    "accepted": 2400,
+    "retried_webhooks": 0,
+    "rejected_after_retries": 0,
+    "answered": 2400,
+    "unanswered": 0,
+    "duplicated": 0,
+    "webhook_ack_ms": {
+      "p50": 11.5,
+      "p95": 21.1,
+      "p99": 36.9,
+      "max": 161.4
+    },
+    "reply_ms": {
+      "p50": 31.9,
+      "p95": 51.8,
+      "p99": 77.6,
+      "max": 272.6
+    },
+    "reply_ms_by_kind": {
+      "unica": {
+        "p50": 35.8,
+        "p95": 55.5,
+        "p99": 76.8,
+        "max": 272.6
+      },
+      "repetida": {
+        "p50": 25.4,
+        "p95": 43.4,
+        "p99": 74.2,
+        "max": 218.9
+      },
+      "otro_tema": {
+        "p50": 25.7,
+        "p95": 45.7,
+        "p99": 80.3,
+        "max": 111.3
+      }
+    }
+  }
+}

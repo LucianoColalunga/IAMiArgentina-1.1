@@ -1,0 +1,104 @@
+{
+  "label": "capacidad-3",
+  "started_at": 1794842700.3033469,
+  "steps": [
+    {
+      "target_rate_per_s": 50.0,
+      "seconds": 60.0,
+      "sent": 3000,
+      "by_channel": {
+        "whatsapp": 1650,
+        "telegram": 750,
+        "messenger": 300,
+        "instagram": 300
+      },
+      "accepted": 3000,
+      "retried_webhooks": 0,
+      "rejected_after_retries": 0,
+      "answered": 3000,
+      "unanswered": 0,
+      "duplicated": 0,
+      "webhook_ack_ms": {
+        "p50": 54.6,
+        "p95": 297.0,
+        "p99": 433.9,
+        "max": 553.5
+      },
+      "reply_ms": {
+        "p50": 24105.0,
+        "p95": 34377.9,
+        "p99": 50026.8,
+        "max": 79630.7
+      },
+      "reply_ms_by_kind": {
+        "unica": {
+          "p50": 24181.6,
+          "p95": 34398.0,
+          "p99": 53323.1,
+          "max": 79630.7
+        },
+        "repetida": {
+          "p50": 24084.8,
+          "p95": 34357.6,
+          "p99": 49872.5,
+          "max": 67680.7
+        },
+        "otro_tema": {
+          "p50": 23612.5,
+          "p95": 33934.6,
+          "p99": 34454.9,
+          "max": 39414.0
+        }
+      }
+    }
+  ],
+  "total": {
+    "target_rate_per_s": null,
+    "seconds": 60.0,
+    "sent": 3000,
+    "by_channel": {
+      "whatsapp": 1650,
+      "telegram": 750,
+      "messenger": 300,
+      "instagram": 300
+    },
+    "accepted": 3000,
+    "retried_webhooks": 0,
+    "rejected_after_retries": 0,
+    "answered": 3000,
+    "unanswered": 0,
+    "duplicated": 0,
+    "webhook_ack_ms": {
+      "p50": 54.6,
+      "p95": 297.0,
+      "p99": 433.9,
+      "max": 553.5
+    },
+    "reply_ms": {
+      "p50": 24105.0,
+      "p95": 34377.9,
+      "p99": 50026.8,
+      "max": 79630.7
+    },
+    "reply_ms_by_kind": {
+      "unica": {
+        "p50": 24181.6,
+        "p95": 34398.0,
+        "p99": 53323.1,
+        "max": 79630.7
+      },
+      "repetida": {
+        "p50": 24084.8,
+        "p95": 34357.6,
+        "p99": 49872.5,
+        "max": 67680.7
+      },
+      "otro_tema": {
+        "p50": 23612.5,
+        "p95": 33934.6,
+        "p99": 34454.9,
+        "max": 39414.0
+      }
+    }
+  }
+}

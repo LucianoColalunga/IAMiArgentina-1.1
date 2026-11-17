@@ -1,0 +1,300 @@
+{
+  "label": "escalonada",
+  "started_at": 1794839190.7790554,
+  "steps": [
+    {
+      "target_rate_per_s": 10.0,
+      "seconds": 30.0,
+      "sent": 300,
+      "by_channel": {
+        "whatsapp": 165,
+        "telegram": 75,
+        "messenger": 30,
+        "instagram": 30
+      },
+      "accepted": 300,
+      "retried_webhooks": 0,
+      "rejected_after_retries": 0,
+      "answered": 300,
+      "unanswered": 0,
+      "duplicated": 0,
+      "webhook_ack_ms": {
+        "p50": 12.0,
+        "p95": 21.6,
+        "p99": 49.8,
+        "max": 136.5
+      },
+      "reply_ms": {
+        "p50": 25.3,
+        "p95": 40.0,
+        "p99": 73.5,
+        "max": 189.7
+      },
+      "reply_ms_by_kind": {
+        "unica": {
+          "p50": 25.0,
+          "p95": 35.7,
+          "p99": 47.9,
+          "max": 73.1
+        },
+        "repetida": {
+          "p50": 25.5,
+          "p95": 43.0,
+          "p99": 123.2,
+          "max": 189.7
+        },
+        "otro_tema": {
+          "p50": 27.1,
+          "p95": 44.8,
+          "p99": 48.4,
+          "max": 49.4
+        }
+      }
+    },
+    {
+      "target_rate_per_s": 25.0,
+      "seconds": 30.0,
+      "sent": 750,
+      "by_channel": {
+        "whatsapp": 417,
+        "telegram": 185,
+        "messenger": 74,
+        "instagram": 74
+      },
+      "accepted": 750,
+      "retried_webhooks": 0,
+      "rejected_after_retries": 0,
+      "answered": 750,
+      "unanswered": 0,
+      "duplicated": 0,
+      "webhook_ack_ms": {
+        "p50": 12.1,
+        "p95": 28.7,
+        "p99": 50.2,
+        "max": 112.8
+      },
+      "reply_ms": {
+        "p50": 25.6,
+        "p95": 48.7,
+        "p99": 68.2,
+        "max": 152.3
+      },
+      "reply_ms_by_kind": {
+        "unica": {
+          "p50": 25.5,
+          "p95": 49.6,
+          "p99": 69.2,
+          "max": 97.1
+        },
+        "repetida": {
+          "p50": 25.7,
+          "p95": 47.9,
+          "p99": 67.1,
+          "max": 152.3
+        },
+        "otro_tema": {
+          "p50": 24.4,
+          "p95": 45.0,
+          "p99": 56.6,
+          "max": 62.8
+        }
+      }
+    },
+    {
+      "target_rate_per_s": 50.0,
+      "seconds": 30.0,
+      "sent": 1500,
+      "by_channel": {
+        "telegram": 375,
+        "messenger": 150,
+        "instagram": 150,
+        "whatsapp": 825
+      },
+      "accepted": 1500,
+      "retried_webhooks": 0,
+      "rejected_after_retries": 0,
+      "answered": 1500,
+      "unanswered": 0,
+      "duplicated": 0,
+      "webhook_ack_ms": {
+        "p50": 14.6,
+        "p95": 56.1,
+        "p99": 90.8,
+        "max": 150.3
+      },
+      "reply_ms": {
+        "p50": 30.3,
+        "p95": 111.5,
+        "p99": 170.6,
+        "max": 233.0
+      },
+      "reply_ms_by_kind": {
+        "unica": {
+          "p50": 30.4,
+          "p95": 103.8,
+          "p99": 156.8,
+          "max": 198.1
+        },
+        "repetida": {
+          "p50": 30.3,
+          "p95": 115.2,
+          "p99": 181.1,
+          "max": 214.7
+        },
+        "otro_tema": {
+          "p50": 30.8,
+          "p95": 64.0,
+          "p99": 160.2,
+          "max": 233.0
+        }
+      }
+    },
+    {
+      "target_rate_per_s": 100.0,
+      "seconds": 30.0,
+      "sent": 2999,
+      "by_channel": {
+        "telegram": 750,
+        "messenger": 300,
+        "instagram": 300,
+        "whatsapp": 1649
+      },
+      "accepted": 2999,
+      "retried_webhooks": 0,
+      "rejected_after_retries": 0,
+      "answered": 2999,
+      "unanswered": 0,
+      "duplicated": 0,
+      "webhook_ack_ms": {
+        "p50": 26.7,
+        "p95": 126.4,
+        "p99": 217.6,
+        "max": 732.4
+      },
+      "reply_ms": {
+        "p50": 68.2,
+        "p95": 495.8,
+        "p99": 15343.7,
+        "max": 25835.9
+      },
+      "reply_ms_by_kind": {
+        "unica": {
+          "p50": 67.7,
+          "p95": 494.1,
+          "p99": 15383.5,
+          "max": 25835.9
+        },
+        "repetida": {
+          "p50": 68.9,
+          "p95": 5085.1,
+          "p99": 10482.2,
+          "max": 25676.3
+        },
+        "otro_tema": {
+          "p50": 60.1,
+          "p95": 261.2,
+          "p99": 398.2,
+          "max": 606.5
+        }
+      }
+    },
+    {
+      "target_rate_per_s": 150.0,
+      "seconds": 30.0,
+      "sent": 4500,
+      "by_channel": {
+        "telegram": 1125,
+        "messenger": 450,
+        "instagram": 450,
+        "whatsapp": 2475
+      },
+      "accepted": 4500,
+      "retried_webhooks": 0,
+      "rejected_after_retries": 0,
+      "answered": 4500,
+      "unanswered": 0,
+      "duplicated": 0,
+      "webhook_ack_ms": {
+        "p50": 3266.0,
+        "p95": 14682.8,
+        "p99": 22724.9,
+        "max": 42178.4
+      },
+      "reply_ms": {
+        "p50": 3882.9,
+        "p95": 15702.5,
+        "p99": 23463.7,
+        "max": 43403.8
+      },
+      "reply_ms_by_kind": {
+        "unica": {
+          "p50": 4036.5,
+          "p95": 15899.1,
+          "p99": 23741.8,
+          "max": 43403.8
+        },
+        "repetida": {
+          "p50": 3745.4,
+          "p95": 15458.9,
+          "p99": 22604.5,
+          "max": 41169.6
+        },
+        "otro_tema": {
+          "p50": 3515.2,
+          "p95": 17901.7,
+          "p99": 26414.7,
+          "max": 29056.0
+        }
+      }
+    }
+  ],
+  "total": {
+    "target_rate_per_s": null,
+    "seconds": 150.0,
+    "sent": 10049,
+    "by_channel": {
+      "whatsapp": 5531,
+      "telegram": 2510,
+      "messenger": 1004,
+      "instagram": 1004
+    },
+    "accepted": 10049,
+    "retried_webhooks": 0,
+    "rejected_after_retries": 0,
+    "answered": 10049,
+    "unanswered": 0,
+    "duplicated": 0,
+    "webhook_ack_ms": {
+      "p50": 60.9,
+      "p95": 10890.1,
+      "p99": 18437.9,
+      "max": 42178.4
+    },
+    "reply_ms": {
+      "p50": 133.3,
+      "p95": 12361.7,
+      "p99": 20442.2,
+      "max": 43403.8
+    },
+    "reply_ms_by_kind": {
+      "unica": {
+        "p50": 133.3,
+        "p95": 12569.0,
+        "p99": 20627.5,
+        "max": 43403.8
+      },
+      "repetida": {
+        "p50": 135.4,
+        "p95": 12048.3,
+        "p99": 19470.6,
+        "max": 41169.6
+      },
+      "otro_tema": {
+        "p50": 112.6,
+        "p95": 11246.7,
+        "p99": 23258.1,
+        "max": 29056.0
+      }
+    }
+  }
+}

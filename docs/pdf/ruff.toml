@@ -1,0 +1,5 @@
+# Mismas reglas que el backend; diagramas es el módulo vecino con las figuras.
+extend = "../../backend/pyproject.toml"
+
+[lint.isort]
+known-local-folder = ["diagramas"]

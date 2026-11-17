@@ -1,0 +1,104 @@
+{
+  "label": "humo",
+  "started_at": 1794838786.3269782,
+  "steps": [
+    {
+      "target_rate_per_s": 10.0,
+      "seconds": 10.0,
+      "sent": 100,
+      "by_channel": {
+        "whatsapp": 55,
+        "telegram": 25,
+        "messenger": 10,
+        "instagram": 10
+      },
+      "accepted": 100,
+      "retried_webhooks": 0,
+      "rejected_after_retries": 0,
+      "answered": 100,
+      "unanswered": 0,
+      "duplicated": 0,
+      "webhook_ack_ms": {
+        "p50": 11.1,
+        "p95": 18.7,
+        "p99": 21.0,
+        "max": 27.6
+      },
+      "reply_ms": {
+        "p50": 27.2,
+        "p95": 43.1,
+        "p99": 52.3,
+        "max": 54.3
+      },
+      "reply_ms_by_kind": {
+        "unica": {
+          "p50": 29.4,
+          "p95": 42.6,
+          "p99": 52.2,
+          "max": 52.3
+        },
+        "repetida": {
+          "p50": 24.8,
+          "p95": 42.8,
+          "p99": 50.5,
+          "max": 54.3
+        },
+        "otro_tema": {
+          "p50": 24.2,
+          "p95": 27.0,
+          "p99": 27.5,
+          "max": 27.6
+        }
+      }
+    }
+  ],
+  "total": {
+    "target_rate_per_s": null,
+    "seconds": 10.0,
+    "sent": 100,
+    "by_channel": {
+      "whatsapp": 55,
+      "telegram": 25,
+      "messenger": 10,
+      "instagram": 10
+    },
+    "accepted": 100,
+    "retried_webhooks": 0,
+    "rejected_after_retries": 0,
+    "answered": 100,
+    "unanswered": 0,
+    "duplicated": 0,
+    "webhook_ack_ms": {
+      "p50": 11.1,
+      "p95": 18.7,
+      "p99": 21.0,
+      "max": 27.6
+    },
+    "reply_ms": {
+      "p50": 27.2,
+      "p95": 43.1,
+      "p99": 52.3,
+      "max": 54.3
+    },
+    "reply_ms_by_kind": {
+      "unica": {
+        "p50": 29.4,
+        "p95": 42.6,
+        "p99": 52.2,
+        "max": 52.3
+      },
+      "repetida": {
+        "p50": 24.8,
+        "p95": 42.8,
+        "p99": 50.5,
+        "max": 54.3
+      },
+      "otro_tema": {
+        "p50": 24.2,
+        "p95": 27.0,
+        "p99": 27.5,
+        "max": 27.6
+      }
+    }
+  }
+}
